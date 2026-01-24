@@ -5,7 +5,7 @@ const LanguageSchema = new mongoose.Schema({
     nativeName: { type: String, required: true },
     code: { type: String, required: true, unique: true },
     isActive: { type: Boolean, default: true },
-    
+
     // Scalable object for all UI translations
     labels: {
         // Language Selection Screen
@@ -13,7 +13,7 @@ const LanguageSchema = new mongoose.Schema({
         change_lang: { type: String, default: "Or Change Language Below" },
         continue_btn: { type: String, default: "Continue" },
         welcome_msg: { type: String, default: "Choose your preferred language" },
-        
+
         // Category Selection Screen
         select_category: { type: String, default: "Select Category" },
 
@@ -28,7 +28,10 @@ const LanguageSchema = new mongoose.Schema({
         favourite_btn: { type: String, default: "Favourite" },
         whatsapp_btn: { type: String, default: "WhatsApp" },
         more_btn: { type: String, default: "More" },
-        type_placeholder: { type: String, default: "Type your message..." }
+        type_placeholder: { type: String, default: "Type your message..." },
+        no_favorites_msg: { type: String, default: "No favorites saved yet." },
+        favorites_limit_msg: { type: String, default: "You can save up to 10 images." },
+        favorites_title: { type: String, default: "My Favorites" }
     }
 }, { timestamps: true });
 
