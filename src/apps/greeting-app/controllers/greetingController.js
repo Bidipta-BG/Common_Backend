@@ -2,18 +2,51 @@
 const Greeting = require('../models/Greeting');
 const Category = require('../models/Category');
 const Language = require('../models/Language');
+const PushToken = require('../models/PushToken');
 
 // --- 1. GREETINGS (IMAGES) ---
 exports.getGreetings = async (req, res, next) => {
     try {
         const { category, language } = req.query;
         let filter = { isActive: true };
+        let sort = { createdAt: -1 }; // Default: Newest first
+
+        // TOP SHARED LOGIC: 
+        // If category is 'top_shared', we sort by shareCount and ignore the category filter
+        if (category === 'top_shared') {
+            sort = { shareCount: -1, createdAt: -1 }; 
+        } else if (category) {
+            filter.category = category;
+        }
         
-        if (category) filter.category = category;
         if (language) filter.language = language;
         
-        const data = await Greeting.find(filter).sort({ createdAt: -1 });
+        // Limit results to 50 for top_shared to keep it highly relevant
+        const limit = category === 'top_shared' ? 50 : 200;
+
+        const data = await Greeting.find(filter).sort(sort).limit(limit);
         res.status(200).json({ success: true, count: data.length, data });
+    } catch (error) { next(error); }
+};
+
+// NEW: Track Share Logic
+// This increments the shareCount field by 1 whenever called
+exports.trackShare = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const greeting = await Greeting.findByIdAndUpdate(
+            id, 
+            { $inc: { shareCount: 1 } }, // Atomic increment
+            { new: true }
+        );
+        
+        if (!greeting) return res.status(404).json({ success: false, message: 'Not found' });
+        
+        res.status(200).json({ 
+            success: true, 
+            message: 'Share tracked successfully', 
+            shareCount: greeting.shareCount 
+        });
     } catch (error) { next(error); }
 };
 
@@ -30,6 +63,7 @@ exports.createGreeting = async (req, res, next) => {
             category,
             language,
             tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+            shareCount: 0, // Initialize shares at zero
             isActive: true
         });
 
@@ -52,9 +86,8 @@ exports.createCategory = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// --- 3. LANGUAGE LOGIC (Updated & Scalable) ---
+// --- 3. LANGUAGE LOGIC ---
 
-// Get all languages with their bilingual labels
 exports.getLanguages = async (req, res, next) => {
     try {
         const languages = await Language.find({ isActive: true });
@@ -66,8 +99,6 @@ exports.getLanguages = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// UPSERT LOGIC: Create or Update language based on code
-// This prevents the "E11000 duplicate key error"
 exports.createLanguage = async (req, res, next) => {
     try {
         const { code } = req.body;
@@ -76,7 +107,6 @@ exports.createLanguage = async (req, res, next) => {
             return res.status(400).json({ success: false, message: "Language code is required" });
         }
 
-        // upsert: true means if 'hi' exists, update it. If not, create it.
         const language = await Language.findOneAndUpdate(
             { code: code }, 
             req.body, 
@@ -91,7 +121,6 @@ exports.createLanguage = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-// Dedicated Update by ID (for admin use)
 exports.updateLanguage = async (req, res, next) => {
     try {
         const language = await Language.findByIdAndUpdate(
@@ -127,4 +156,36 @@ exports.deleteGreeting = async (req, res, next) => {
         if (!greeting) return res.status(404).json({ success: false, message: 'Not found' });
         res.status(200).json({ success: true, message: 'Greeting deactivated' });
     } catch (error) { next(error); }
+};
+
+
+
+exports.saveToken = async (req, res, next) => {
+    try {
+        const { token } = req.body;
+
+        if (!token) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Token is required" 
+            });
+        }
+
+        // Upsert logic: If the token exists, update 'lastUsed'. 
+        // If it doesn't exist, create a new record.
+        const updatedToken = await PushToken.findOneAndUpdate(
+            { token },
+            { lastUsed: Date.now() },
+            { upsert: true, new: true }
+        );
+
+        res.status(200).json({ 
+            success: true, 
+            message: "Token saved successfully",
+            data: updatedToken 
+        });
+    } catch (error) {
+        // Pass the error to your global errorHandler
+        next(error);
+    }
 };

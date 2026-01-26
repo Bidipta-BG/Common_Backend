@@ -10,6 +10,10 @@ router.get('/images/:id', greetingController.getGreetingById);
 router.put('/images/:id', greetingController.updateGreeting);
 router.delete('/images/:id', greetingController.deleteGreeting);
 
+// NEW: Route to increment share count for a specific image
+// We use PATCH because we are only updating a single field (shareCount)
+router.patch('/images/:id/share', greetingController.trackShare);
+
 // Use ONLY this one for POSTing images
 // Multer first, then Validator, then Controller
 router.post(
@@ -26,5 +30,9 @@ router.post('/categories', greetingController.createCategory);
 // --- Languages ---
 router.get('/languages', greetingController.getLanguages);
 router.post('/languages', greetingController.createLanguage);
+
+// Route for the Mobile App to register its token
+router.post('/save-push-token', greetingController.saveToken);
+
 
 module.exports = router;

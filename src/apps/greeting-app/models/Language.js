@@ -31,8 +31,20 @@ const LanguageSchema = new mongoose.Schema({
         type_placeholder: { type: String, default: "Type your message..." },
         no_favorites_msg: { type: String, default: "No favorites saved yet." },
         favorites_limit_msg: { type: String, default: "You can save up to 10 images." },
-        favorites_title: { type: String, default: "My Favorites" }
+        favorites_title: { type: String, default: "My Favorites" },
+        unlock_feature: { type: String, default: "Unlock Feature" },
+        watch_ad_msg: { type: String, default: "Watch a video to add a second text layer for this session." },
+        cancel_btn: { type: String, default: "Cancel" },
+        watch_btn: { type: String, default: "Watch Ad" },
+        add_text_1: { type: String, default: "Add Text 1" },
+        add_text_2: { type: String, default: "Add Text 2" },
+        unlock_text_2: { type: String, default: "Unlock Text 2" },
+        done_btn: { type: String, default: "DONE" },
+        tab_color: { type: String, default: "COLOR" },
+        tab_font: { type: String, default: "FONT" },
+        tab_size: { type: String, default: "SIZE" },
+        ad_loading: { type: String, default: "Video is not ready yet, trying to reload..." },
     }
-}, { timestamps: true });
+}, { timestamps: true });   
 
 module.exports = mongoose.model('GreetingApp_Language', LanguageSchema);

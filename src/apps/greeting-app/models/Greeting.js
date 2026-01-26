@@ -5,6 +5,7 @@ const GreetingSchema = new mongoose.Schema({
     category: { type: String, required: true },
     language: { type: String, required: true },
     tags: [String],
+    shareCount: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
