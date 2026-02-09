@@ -52,17 +52,24 @@ exports.trackShare = async (req, res, next) => {
 
 exports.createGreeting = async (req, res, next) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'No image file uploaded' });
+        const { category, language } = req.body;
+
+        // Determine image URL source: uploaded file (req.file) or provided imageUrl in body
+        const imageUrl = req.file ? req.file.location : req.body.imageUrl;
+
+        // Normalize tags: accept array or comma-separated string
+        let tags = [];
+        if (Array.isArray(req.body.tags)) {
+            tags = req.body.tags.map(t => String(t).trim()).filter(Boolean);
+        } else if (typeof req.body.tags === 'string' && req.body.tags.trim().length > 0) {
+            tags = req.body.tags.split(',').map(tag => tag.trim()).filter(Boolean);
         }
 
-        const { category, language, tags } = req.body;
-
         const greeting = await Greeting.create({
-            imageUrl: req.file.location,
+            imageUrl,
             category,
             language,
-            tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+            tags,
             shareCount: 0, // Initialize shares at zero
             isActive: true
         });
