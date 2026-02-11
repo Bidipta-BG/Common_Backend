@@ -3,6 +3,7 @@ const Greeting = require('../models/Greeting');
 const Category = require('../models/Category');
 const Language = require('../models/Language');
 const PushToken = require('../models/PushToken');
+const AppConfig = require('../models/AppConfig'); // Import AppConfig
 
 // --- 1. GREETINGS (IMAGES) ---
 exports.getGreetings = async (req, res, next) => {
@@ -14,13 +15,13 @@ exports.getGreetings = async (req, res, next) => {
         // TOP SHARED LOGIC: 
         // If category is 'top_shared', we sort by shareCount and ignore the category filter
         if (category === 'top_shared') {
-            sort = { shareCount: -1, createdAt: -1 }; 
+            sort = { shareCount: -1, createdAt: -1 };
         } else if (category) {
             filter.category = category;
         }
-        
+
         if (language) filter.language = language;
-        
+
         // Limit results to 50 for top_shared to keep it highly relevant
         const limit = category === 'top_shared' ? 50 : 200;
 
@@ -35,17 +36,17 @@ exports.trackShare = async (req, res, next) => {
     try {
         const { id } = req.params;
         const greeting = await Greeting.findByIdAndUpdate(
-            id, 
+            id,
             { $inc: { shareCount: 1 } }, // Atomic increment
             { new: true }
         );
-        
+
         if (!greeting) return res.status(404).json({ success: false, message: 'Not found' });
-        
-        res.status(200).json({ 
-            success: true, 
-            message: 'Share tracked successfully', 
-            shareCount: greeting.shareCount 
+
+        res.status(200).json({
+            success: true,
+            message: 'Share tracked successfully',
+            shareCount: greeting.shareCount
         });
     } catch (error) { next(error); }
 };
@@ -65,14 +66,30 @@ exports.createGreeting = async (req, res, next) => {
             tags = req.body.tags.split(',').map(tag => tag.trim()).filter(Boolean);
         }
 
+        // Template Feature Fields
+        const isTemplate = req.body.isTemplate === 'true' || req.body.isTemplate === true;
+        let textLayers = [];
+        if (req.body.textLayers) {
+            try {
+                textLayers = typeof req.body.textLayers === 'string'
+                    ? JSON.parse(req.body.textLayers)
+                    : req.body.textLayers;
+            } catch (e) {
+                console.error("Error parsing textLayers:", e);
+            }
+        }
+
         const greeting = await Greeting.create({
             imageUrl,
             category,
             language,
             tags,
-            shareCount: 0, // Initialize shares at zero
-            isActive: true
+            shareCount: 0,
+            isActive: true,
+            isTemplate,
+            textLayers
         });
+
 
         res.status(201).json({ success: true, data: greeting });
     } catch (error) { next(error); }
@@ -86,22 +103,31 @@ exports.getCategories = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
-exports.createCategory = async (req, res, next) => {
-    try {
-        const category = await Category.create(req.body);
-        res.status(201).json({ success: true, data: category });
-    } catch (error) { next(error); }
-};
-
 // --- 3. LANGUAGE LOGIC ---
 
 exports.getLanguages = async (req, res, next) => {
     try {
         const languages = await Language.find({ isActive: true });
-        res.json({ 
-            success: true, 
-            count: languages.length, 
-            data: languages 
+
+        // Fetch App Config or create default if not exists
+        let config = await AppConfig.findOne();
+        if (!config) {
+            config = await AppConfig.create({
+                androidMinVersion: "1.0.3",
+                updateUrl: "https://play.google.com/store/apps/details?id=com.axomit.greetingapp",
+                forceUpdate: true
+            });
+        }
+
+        res.json({
+            success: true,
+            metadata: {
+                androidMinVersion: config.androidMinVersion,
+                updateUrl: config.updateUrl,
+                forceUpdate: config.forceUpdate
+            },
+            count: languages.length,
+            data: languages
         });
     } catch (error) { next(error); }
 };
@@ -109,30 +135,37 @@ exports.getLanguages = async (req, res, next) => {
 exports.createLanguage = async (req, res, next) => {
     try {
         const { code } = req.body;
-        
+
         if (!code) {
             return res.status(400).json({ success: false, message: "Language code is required" });
         }
 
         const language = await Language.findOneAndUpdate(
-            { code: code }, 
-            req.body, 
+            { code: code },
+            req.body,
             { new: true, upsert: true, runValidators: true }
         );
 
-        res.status(201).json({ 
-            success: true, 
+        res.status(201).json({
+            success: true,
             message: 'Language processed successfully',
-            data: language 
+            data: language
         });
+    } catch (error) { next(error); }
+};
+
+exports.createCategory = async (req, res, next) => {
+    try {
+        const category = await Category.create(req.body);
+        res.status(201).json({ success: true, data: category });
     } catch (error) { next(error); }
 };
 
 exports.updateLanguage = async (req, res, next) => {
     try {
         const language = await Language.findByIdAndUpdate(
-            req.params.id, 
-            req.body, 
+            req.params.id,
+            req.body,
             { new: true, runValidators: true }
         );
         if (!language) return res.status(404).json({ success: false, message: 'Language not found' });
@@ -172,9 +205,9 @@ exports.saveToken = async (req, res, next) => {
         const { token } = req.body;
 
         if (!token) {
-            return res.status(400).json({ 
-                success: false, 
-                message: "Token is required" 
+            return res.status(400).json({
+                success: false,
+                message: "Token is required"
             });
         }
 
@@ -186,10 +219,10 @@ exports.saveToken = async (req, res, next) => {
             { upsert: true, new: true }
         );
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: "Token saved successfully",
-            data: updatedToken 
+            data: updatedToken
         });
     } catch (error) {
         // Pass the error to your global errorHandler
