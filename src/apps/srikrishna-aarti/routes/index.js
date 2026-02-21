@@ -4,6 +4,7 @@ const galleryController = require('../controllers/galleryController');
 const astroController = require('../controllers/astroController');
 const slokaController = require('../controllers/slokaController');
 const mantraController = require('../controllers/mantraController');
+const referralController = require('../controllers/referralController');
 
 // GET endpoint - Fetch all gallery data
 router.get('/gallery', galleryController.getGalleryData);
@@ -13,6 +14,9 @@ router.get('/daily-slokas', slokaController.getDailySlokas);
 
 // GET endpoint - Fetch mantras
 router.get('/mantras', mantraController.getMantras);
+
+// GET endpoint - Referral Status
+router.get('/referral/status', referralController.getStatus);
 
 // POST endpoints - Create new data
 router.post('/promo-banner', galleryController.createPromoBanner);
@@ -28,5 +32,9 @@ router.post('/daily-slokas', slokaController.updateSlokas);
 
 // Mantra endpoints
 router.post('/mantras', mantraController.updateMantras);
+
+// Referral endpoints
+router.post('/referral/redeem', referralController.redeemCode);
+router.post('/referral/claim', referralController.claimRewards);
 
 module.exports = router;

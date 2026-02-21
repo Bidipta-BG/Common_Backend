@@ -5,5 +5,7 @@ module.exports = {
     HeroSection: require('./HeroSection'),
     AstroInterest: require('./AstroInterest'),
     Sloka: require('./Sloka'),
-    Mantra: require('./Mantra')
+    Mantra: require('./Mantra'),
+    ReferringUser: require('./ReferringUser'),
+    ReferralLog: require('./ReferralLog')
 };
