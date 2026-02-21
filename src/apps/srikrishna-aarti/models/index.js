@@ -2,5 +2,6 @@ module.exports = {
     PromoBanner: require('./PromoBanner'),
     Image: require('./Image'),
     Category: require('./Category'),
-    HeroSection: require('./HeroSection')
+    HeroSection: require('./HeroSection'),
+    AstroInterest: require('./AstroInterest')
 };
