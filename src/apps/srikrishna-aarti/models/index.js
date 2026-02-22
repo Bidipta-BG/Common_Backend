@@ -7,5 +7,6 @@ module.exports = {
     Sloka: require('./Sloka'),
     Mantra: require('./Mantra'),
     ReferringUser: require('./ReferringUser'),
-    ReferralLog: require('./ReferralLog')
+    ReferralLog: require('./ReferralLog'),
+    AppConfig: require('./AppConfig')
 };
