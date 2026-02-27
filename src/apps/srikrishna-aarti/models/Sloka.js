@@ -20,6 +20,14 @@ const slokaSchema = new mongoose.Schema({
     isFeatured: {
         type: Boolean,
         default: false
+    },
+    image: {
+        type: String,
+        default: ""
+    },
+    music: {
+        type: String,
+        default: ""
     }
 }, {
     timestamps: true

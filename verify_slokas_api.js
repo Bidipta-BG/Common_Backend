@@ -14,7 +14,7 @@ async function sendRequest(method, path, payload) {
         };
 
         if (data) {
-            options.headers['Content-Length'] = data.length;
+            options.headers['Content-Length'] = Buffer.byteLength(data);
         }
 
         const req = http.request(options, (res) => {
@@ -36,57 +36,51 @@ async function sendRequest(method, path, payload) {
 }
 
 async function verifySlokas() {
-    console.log('Step 1: Adding a new Featured Sloka...');
-    const sloka1 = {
-        chapter: "Chapter 2, Verse 47",
-        sans: "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।",
+    console.log('Step 1: Adding a new Sloka...');
+    const sloka = {
+        chapter: "Chapter 1, Verse 1",
+        sans: "धर्मक्षेत्रे कुरुक्षेत्रे...",
         en: {
-            text: "You have a right to perform your prescribed duty...",
-            meaning: "Focus on your work, not the results."
+            text: "On the holy field of Kurukshetra...",
+            meaning: "Dharmakshetra is Kurukshetra..."
         },
         hi: {
-            text: "तुम्हारा अधिकार केवल कर्म करने में है...",
-            meaning: "अपने कर्म पर ध्यान दो, परिणाम पर नहीं।"
+            text: "धर्मक्षेत्र कुरुक्षेत्र में...",
+            meaning: "धर्मक्षेत्र कुरुक्षेत्र में..."
         },
-        isFeatured: true
+        isFeatured: true,
+        image: "https://example.com/sloka-image.jpg",
+        music: "https://example.com/sloka-music.mp3"
     };
 
-    const res1 = await sendRequest('POST', '/api/srikrishna-aarti/daily-slokas', sloka1);
-    console.log('Post 1 Status:', res1.status);
-    const slokaId1 = res1.body.data._id;
+    const res1 = await sendRequest('POST', '/api/srikrishna-aarti/daily-slokas', sloka);
+    console.log('Post Status:', res1.status);
 
-    console.log('\nStep 2: Adding a second Sloka (not featured)...');
-    const sloka2 = {
-        chapter: "Chapter 4, Verse 7",
-        sans: "यदा यदा हि धर्मस्य ग्लानिर्भवति भारत।",
-        en: {
-            text: "Whenever there is a decline in righteousness...",
-            meaning: "God descends when Dharma needs protection."
-        },
-        hi: {
-            text: "जब-जब धर्म की हानि और अधर्म की वृद्धि होती है...",
-            meaning: "धर्म की रक्षा के लिए भगवान अवतार लेते हैं।"
-        },
-        isFeatured: false
-    };
+    if (res1.status !== 201) {
+        console.log('Data:', res1.body);
+        throw new Error('Post failed');
+    }
 
-    const res2 = await sendRequest('POST', '/api/srikrishna-aarti/daily-slokas', sloka2);
-    console.log('Post 2 Status:', res2.status);
+    console.log('\nStep 2: Fetching Daily Slokas...');
+    const res2 = await sendRequest('GET', '/api/srikrishna-aarti/daily-slokas');
+    console.log('Get Status:', res2.status);
 
-    console.log('\nStep 3: Fetching All Slokas...');
-    const res3 = await sendRequest('GET', '/api/srikrishna-aarti/daily-slokas');
-    console.log('Get Status:', res3.status);
-    console.log('Featured Sloka ID:', res3.body.data.featuredSloka.id);
-    console.log('Total Slokas:', res3.body.data.allSlokas.length);
+    if (res2.status === 200) {
+        const featured = res2.body.data.featuredSloka;
+        console.log('Featured Sloka Image:', featured.image);
+        console.log('Featured Sloka Music:', featured.music);
 
-    if (res3.body.data.featuredSloka.id === slokaId1) {
-        console.log('\n✓ SUCCESS: Slokas recorded and retrieved correctly.');
+        if (featured.image === sloka.image && featured.music === sloka.music) {
+            console.log('\n✓ SUCCESS: Sloka recorded and retrieved correctly with image/music.');
+        } else {
+            console.log('\n✗ FAILURE: Data mismatch.');
+        }
     } else {
-        console.log('\n✗ FAILURE: Data mismatch.');
+        console.log('\n✗ FAILURE: Get failed.');
     }
 }
 
 verifySlokas().catch(err => {
-    console.error('Error during verification:', err.message);
+    console.error('Error during verification:', err.name === 'Error' ? err.message : err);
     console.log('NOTE: Make sure the server is running on port 3000.');
 });

@@ -14,7 +14,7 @@ async function sendRequest(method, path, payload) {
         };
 
         if (data) {
-            options.headers['Content-Length'] = data.length;
+            options.headers['Content-Length'] = Buffer.byteLength(data);
         }
 
         const req = http.request(options, (res) => {
@@ -48,7 +48,9 @@ async function verifyMantras() {
             en: "Chanting this mantra 108 times is believed to remove obstacles...",
             hi: "इस मंत्र का 108 बार जाप करने से व्यावसायिक जीवन में आने वाली बाधाएं..."
         },
-        count: 108
+        count: 108,
+        image: "https://example.com/mantra-image.jpg",
+        music: "https://example.com/mantra-music.mp3"
     };
 
     const res1 = await sendRequest('POST', '/api/srikrishna-aarti/mantras', mantra);

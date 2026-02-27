@@ -14,7 +14,9 @@ exports.getMantras = async (req, res, next) => {
             sans: m.sans,
             benefit: m.benefit,
             details: m.details,
-            count: m.count
+            count: m.count,
+            image: m.image || "",
+            music: m.music || ""
         }));
 
         res.status(200).json({
@@ -33,14 +35,14 @@ exports.getMantras = async (req, res, next) => {
  */
 exports.updateMantras = async (req, res, next) => {
     try {
-        const { id, title, sans, benefit, details, count } = req.body;
+        const { id, title, sans, benefit, details, count, image, music } = req.body;
 
         let mantra;
         if (id) {
             // Update existing
             mantra = await Mantra.findByIdAndUpdate(
                 id,
-                { title, sans, benefit, details, count },
+                { title, sans, benefit, details, count, image, music },
                 { new: true, runValidators: true }
             );
         } else {
@@ -50,7 +52,9 @@ exports.updateMantras = async (req, res, next) => {
                 sans,
                 benefit,
                 details,
-                count
+                count,
+                image,
+                music
             });
         }
 

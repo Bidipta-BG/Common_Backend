@@ -14,7 +14,9 @@ exports.getDailySlokas = async (req, res, next) => {
             chapter: sloka.chapter,
             sans: sloka.sans,
             en: sloka.en,
-            hi: sloka.hi
+            hi: sloka.hi,
+            image: sloka.image || "",
+            music: sloka.music || ""
         }));
 
         // Find the featured one (or take the first one if none is marked)
@@ -27,7 +29,9 @@ exports.getDailySlokas = async (req, res, next) => {
                 chapter: featuredSlokaDoc.chapter,
                 sans: featuredSlokaDoc.sans,
                 en: featuredSlokaDoc.en,
-                hi: featuredSlokaDoc.hi
+                hi: featuredSlokaDoc.hi,
+                image: featuredSlokaDoc.image || "",
+                music: featuredSlokaDoc.music || ""
             };
         }
 
@@ -50,7 +54,7 @@ exports.getDailySlokas = async (req, res, next) => {
  */
 exports.updateSlokas = async (req, res, next) => {
     try {
-        const { id, chapter, sans, en, hi, isFeatured } = req.body;
+        const { id, chapter, sans, en, hi, isFeatured, image, music } = req.body;
 
         // If this sloka is becoming the featured one, unset any others
         if (isFeatured) {
@@ -62,7 +66,7 @@ exports.updateSlokas = async (req, res, next) => {
             // Update existing
             sloka = await Sloka.findByIdAndUpdate(
                 id,
-                { chapter, sans, en, hi, isFeatured },
+                { chapter, sans, en, hi, isFeatured, image, music },
                 { new: true, runValidators: true }
             );
         } else {
@@ -72,7 +76,9 @@ exports.updateSlokas = async (req, res, next) => {
                 sans,
                 en,
                 hi,
-                isFeatured
+                isFeatured,
+                image,
+                music
             });
         }
 

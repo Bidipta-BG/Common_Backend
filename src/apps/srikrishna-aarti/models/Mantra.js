@@ -20,6 +20,14 @@ const mantraSchema = new mongoose.Schema({
     count: {
         type: Number,
         default: 108
+    },
+    image: {
+        type: String,
+        default: ""
+    },
+    music: {
+        type: String,
+        default: ""
     }
 }, {
     timestamps: true
