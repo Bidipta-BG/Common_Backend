@@ -8,5 +8,8 @@ module.exports = {
     Mantra: require('./Mantra'),
     ReferringUser: require('./ReferringUser'),
     ReferralLog: require('./ReferralLog'),
-    AppConfig: require('./AppConfig')
+    AppConfig: require('./AppConfig'),
+    Granth: require('./Granth'),
+    Chapter: require('./Chapter'),
+    Verse: require('./Verse')
 };

@@ -6,6 +6,7 @@ const slokaController = require('../controllers/slokaController');
 const mantraController = require('../controllers/mantraController');
 const referralController = require('../controllers/referralController');
 const systemController = require('../controllers/systemController');
+const granthController = require('../controllers/granthController');
 
 // GET endpoint - Fetch all gallery data
 router.get('/gallery', galleryController.getGalleryData);
@@ -21,6 +22,11 @@ router.get('/referral/status', referralController.getStatus);
 
 // GET endpoint - Version Check
 router.get('/system/version-check', systemController.getVersionCheck);
+
+// GET endpoints - Granth Study System
+router.get('/granth', granthController.getGranthList);
+router.get('/granth/:bookId', granthController.getGranthTree);
+router.get('/granth/verse/:verseId', granthController.getVerseDetail);
 
 // POST endpoints - Create new data
 router.post('/promo-banner', galleryController.createPromoBanner);
@@ -43,5 +49,10 @@ router.post('/referral/claim', referralController.claimRewards);
 
 // System endpoints
 router.post('/system/version-check', systemController.updateVersionConfig);
+
+// Granth endpoints
+router.post('/granth', granthController.updateGranth);
+router.post('/granth/chapter', granthController.updateChapter);
+router.post('/granth/verse', granthController.updateVerse);
 
 module.exports = router;
