@@ -9,7 +9,7 @@ const generateReferralCode = () => {
     for (let i = 0; i < 6; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return `KRISHNA-${code}`;
+    return `SHIV-${code}`;
 };
 
 /**
