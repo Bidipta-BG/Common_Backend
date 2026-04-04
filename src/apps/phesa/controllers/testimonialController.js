@@ -6,12 +6,12 @@ const testimonialController = {
   // GET / (requireAuth)
   getAll: async (req, res) => {
     try {
-      const { status, source, starred, form_id, search } = req.query;
+      const { status, source, starred, form_id, search, limit, page } = req.query;
       const userId = req.userId;
 
       let query = supabase
         .from('testimonials')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
@@ -24,7 +24,15 @@ const testimonialController = {
         query = query.or(`reviewer_name.ilike.%${search}%,text_content.ilike.%${search}%`);
       }
 
-      const { data, error } = await query;
+      if (limit) {
+        const p = parseInt(page) || 1;
+        const l = parseInt(limit) || 10;
+        const from = (p - 1) * l;
+        const to = from + l - 1;
+        query = query.range(from, to);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
 

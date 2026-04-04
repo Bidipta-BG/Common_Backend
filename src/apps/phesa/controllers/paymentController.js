@@ -15,11 +15,11 @@ const paymentController = {
         return res.status(400).json({ error: 'Valid plan (starter or pro) is required' });
       }
 
-      const planIdEnvVar = plan === 'pro' ? 'RAZORPAY_PRO_PLAN_ID' : 'RAZORPAY_STARTER_PLAN_ID';
+      const planIdEnvVar = plan === 'pro' ? 'RAZORPAY_PLAN_ID_PRO' : 'RAZORPAY_PLAN_ID_STARTER';
       const rzpPlanId = process.env[planIdEnvVar];
 
       if (!rzpPlanId) {
-        return res.status(500).json({ error: `Razorpay plan ID not configured for \${plan}. Add \${planIdEnvVar} to .env.` });
+        return res.status(500).json({ error: `Razorpay plan ID not configured for ${plan}. Add ${planIdEnvVar} to .env.` });
       }
 
       // Standard Razorpay subscription configuration bindings 
@@ -73,7 +73,7 @@ const paymentController = {
         
         // Use attached Notes mappings cleanly supplied in \`createSubscription\`, bounding fallback to registered Email lookup
         const userEmail = customerEmail || sub.notes?.email;
-        const planType = (sub.plan_id === process.env.RAZORPAY_PRO_PLAN_ID) ? 'pro' : 'starter';
+        const planType = (sub.plan_id === process.env.RAZORPAY_PLAN_ID_PRO) ? 'pro' : 'starter';
 
         if (sub.notes && sub.notes.user_id) {
            await supabase
@@ -109,6 +109,54 @@ const paymentController = {
     } catch (error) {
       console.error('Error handling webhook processing structure:', error);
       res.status(500).send('Internal server error');
+    }
+  },
+
+  verifySubscription: async (req, res) => {
+    try {
+      const { razorpay_payment_id, razorpay_subscription_id, razorpay_signature } = req.body;
+      const userId = req.userId;
+      const secret = process.env.RAZORPAY_KEY_SECRET;
+
+      if (!razorpay_payment_id || !razorpay_subscription_id || !razorpay_signature) {
+        return res.status(400).json({ error: 'Incomplete payment details' });
+      }
+
+      // Verify the Razorpay signature for the subscription
+      const generatedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(razorpay_payment_id + '|' + razorpay_subscription_id)
+        .digest('hex');
+
+      if (generatedSignature !== razorpay_signature) {
+        return res.status(400).json({ error: 'Invalid payment signature' });
+      }
+
+      // 1. Get the latest subscription info from Razorpay to determine the plan
+      const subscription = await razorpay.subscriptions.fetch(razorpay_subscription_id);
+      const planType = (subscription.plan_id === process.env.RAZORPAY_PLAN_ID_PRO) ? 'pro' : 'starter';
+
+      // 2. Update user profile in Supabase
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ 
+          plan: planType, 
+          razorpay_subscription_id: razorpay_subscription_id 
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      res.status(200).json({ 
+        success: true, 
+        message: 'Subscription verified and activated successfully!',
+        plan: data.plan
+      });
+    } catch (error) {
+      console.error('Error verifying subscription:', error);
+      res.status(500).json({ error: 'Internal server error while verifying payment.' });
     }
   }
 };
