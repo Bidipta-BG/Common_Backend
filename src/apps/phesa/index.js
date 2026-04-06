@@ -9,6 +9,8 @@ router.use('/widgets',      require('./routes/widgets'));
 router.use('/import',       require('./routes/import'));
 router.use('/analytics',    require('./routes/analytics'));
 router.use('/payments',     require('./routes/payments'));
+router.use('/business-profile', require('./routes/businessProfile'));
 router.use('/users',        require('./routes/users'));
+router.use('/',             require('./routes/auth'));
 
 module.exports = router;
