@@ -46,15 +46,17 @@ const aiAnalyticsController = {
       
       const google_connected = !!gbp;
 
-      // 3. Count Testimonials (Approved only)
+      // 3. Count Testimonials (Calculate both total and approved)
       const { data: testimonials } = await supabase
         .from('testimonials')
-        .select('source, screenshot_url')
-        .eq('user_id', userId)
-        .eq('status', 'approved');
+        .select('source, screenshot_url, status')
+        .eq('user_id', userId);
+
+      const approvedCount = testimonials.filter(t => t.status === 'approved').length;
 
       const counts = {
         total: testimonials.length,
+        approved_total: approvedCount,
         google_reviews: testimonials.filter(t => t.source === 'google').length,
         form_testimonials: testimonials.filter(t => t.source === 'form').length,
         manual_count: testimonials.filter(t => t.source === 'manual').length,
@@ -63,7 +65,7 @@ const aiAnalyticsController = {
 
       // 4. Plan Limits
       const plan = profile.plan || 'free';
-      const limit = 1; // 1 analysis per period
+      const limit = plan === 'pro' ? 3 : 1; 
       let calls_used = (plan === 'free') ? (profile.ai_analyses_used_lifetime || 0) : current_month_used;
       let calls_remaining = Math.max(0, limit - calls_used);
 
@@ -71,13 +73,10 @@ const aiAnalyticsController = {
       let can_run = true;
       let reason = null;
 
-      if (!google_connected) {
-        can_run = false;
-        reason = 'google_not_connected';
-      } else if (calls_remaining === 0) {
+      if (calls_remaining === 0) {
         can_run = false;
         reason = 'limit_reached';
-      } else if (counts.total < 3) {
+      } else if (counts.total < 10) {
         can_run = false;
         reason = 'no_data';
       }
@@ -117,7 +116,8 @@ const aiAnalyticsController = {
       if (plan === 'free' && profile.ai_analyses_used_lifetime >= 1) {
         return res.status(403).json({ error: 'limit_reached' });
       }
-      if (plan !== 'free' && profile.ai_analyses_used_this_month >= 1) {
+      const limit = plan === 'pro' ? 3 : 1;
+      if (plan !== 'free' && profile.ai_analyses_used_this_month >= limit) {
         // Double check reset_at
         const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         if (new Date(profile.ai_analyses_reset_at) >= firstOfMonth) {
@@ -125,14 +125,13 @@ const aiAnalyticsController = {
         }
       }
 
-      // 2. Fetch Aggregated Data
+      // 2. Fetch Aggregated Data (Status agnostic for balanced analysis)
       const { data: testimonials } = await supabase
         .from('testimonials')
         .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'approved');
+        .eq('user_id', userId);
 
-      if (testimonials.length < 3) {
+      if (testimonials.length < 10) {
         return res.status(403).json({ error: 'no_data' });
       }
 
@@ -146,27 +145,43 @@ const aiAnalyticsController = {
                              ? testimonials.filter(t => t.screenshot_url).map(t => t.screenshot_url)
                              : [];
 
-      // 4. Construct Prompt
       const basePrompt = `You are a business analyst helping an Indian small business owner understand their customer feedback. Business: ${businessName}.
 Total reviews: ${testimonials.length} (${testimonials.filter(t => t.source === 'google').length} Google, ${testimonials.filter(t => t.source === 'form').length} form submissions, ${testimonials.filter(t => t.source === 'manual').length} manual entries).
 
 Reviews data:
 ${formattedReviews}
 
-Provide analysis with these sections using markdown:
+IMPORTANT: You MUST produce ALL of the following sections in the EXACT order listed below. Use the EXACT header text shown. Do NOT skip, merge, or rename any section. Each section header must start with '## '.
+
 ## Overall Sentiment
-## What Customers Love (top 3 bullet points)
-## Areas to Improve (top 3 bullet points)  
-## Action Recommendations (3 specific actions)
+(Write 2-3 sentences summarising the average rating and overall tone)
+
+## What Customers Love
+(List exactly 3 bullet points using '- ' prefix)
+
+## Areas to Improve
+(List exactly 3 bullet points using '- ' prefix)
+
+## Action Recommendations
+(List exactly 3 numbered action items)
 
 Be encouraging, specific, and write in simple English suitable for an Indian small business owner.`;
 
       const deepPromptAddon = `
-## Sentiment by Source (Google vs Form vs Manual)
-## Customer Persona (who are the typical customers)
-## Trends (note any frequency or quality changes)
-## Priority Action Plan (ordered by impact)
-## Follow-up Suggestions (which customers to approach for video testimonials)`;
+
+For this Pro Deep Analysis, you MUST ALSO include ALL four of these additional sections below, in this EXACT order, with these EXACT headers:
+
+## Sentiment by Source
+(Create a table or bullet list comparing Google vs Form vs Manual reviews. If a source has 0 reviews, explicitly say so and explain the opportunity.)
+
+## Customer Persona
+(Describe 3-4 distinct customer personas based on the reviewer roles and feedback patterns. Use a table or structured bullets.)
+
+## Priority Action Plan
+(List EXACTLY 4 to 6 priority action items, ordered from highest to lowest business impact. Use numbered list format: 1. 2. 3. etc. THIS SECTION IS MANDATORY — do not skip it or merge it with Action Recommendations.)
+
+## Follow-up Suggestions
+(Name 3-5 specific customers from the reviews who should be approached for video testimonials, and explain why.)`;
 
       const finalPrompt = plan === 'pro' ? (basePrompt + deepPromptAddon) : basePrompt;
 
@@ -174,7 +189,7 @@ Be encouraging, specific, and write in simple English suitable for an Indian sma
       let apiResponse;
       if (plan === 'pro' && screenshotUrls.length > 0) {
         apiResponse = await anthropic.messages.create({
-          model: 'claude-3-5-sonnet-latest',
+          model: 'claude-sonnet-4-6',
           max_tokens: 2500,
           messages: [{
             role: 'user',
@@ -189,7 +204,7 @@ Be encouraging, specific, and write in simple English suitable for an Indian sma
         });
       } else {
         apiResponse = await anthropic.messages.create({
-          model: 'claude-3-5-sonnet-latest',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1500,
           messages: [{ role: 'user', content: finalPrompt }]
         });

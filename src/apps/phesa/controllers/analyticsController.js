@@ -67,6 +67,26 @@ const analyticsController = {
         });
       }
 
+      // Fetch recent 10 widget interactions for the Live Feed
+      const { data: recentViewsData } = await supabase
+        .from('widget_analytics')
+        .select(`
+          id, 
+          viewed_at, 
+          referrer, 
+          widgets (name)
+        `)
+        .eq('user_id', userId)
+        .order('viewed_at', { ascending: false })
+        .limit(10);
+
+      const recentViews = (recentViewsData || []).map(row => ({
+        id: row.id,
+        date: row.viewed_at,
+        referrer: row.referrer || 'Direct Link',
+        widget: row.widgets?.name || 'Unknown Widget'
+      }));
+
       const averageRating = ratedCount > 0 ? (totalRatingSum / ratedCount).toFixed(1) : 0;
 
       res.status(200).json({
@@ -77,7 +97,8 @@ const analyticsController = {
         total_widget_views: totalWidgetViews,
         this_month_views: thisMonthViews,
         this_month_testimonials: thisMonthTestimonials,
-        average_rating: Number(averageRating)
+        average_rating: Number(averageRating),
+        recent_views: recentViews
       });
     } catch (error) {
       console.error('Error in getDashboardStats:', error);

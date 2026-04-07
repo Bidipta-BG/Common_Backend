@@ -109,7 +109,8 @@ const testimonialController = {
         rating,
         text_content,
         video_url,
-        status: 'pending' // Enforcing default
+        status: 'pending', // Enforcing default
+        source: 'form'
       };
 
       const { data: createdTestimonial, error: insertError } = await supabase
