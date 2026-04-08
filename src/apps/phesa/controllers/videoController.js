@@ -101,24 +101,27 @@ const videoController = {
         return res.status(404).json({ error: 'One or more testimonials not found' });
       }
 
-      // 5. Build Creatomate modifications
+      // 5. Build Creatomate modifications (v2 format — keys use .text / .source suffixes)
       const modifications = {
-        'business-name': profile.business_name,
-        'business-logo': profile.business_logo_url,
-        'business-tagline': profile.business_tagline || '',
-        'music-style': music_style || 'upbeat'
+        'business-name.text': profile.business_name,
+        'business-logo.source': profile.business_logo_url,
+        'business-tagline.text': profile.business_tagline || ''
       };
 
       testimonials.forEach((t, i) => {
-        modifications[`testimonial-${i + 1}-name`] = t.reviewer_name;
-        modifications[`testimonial-${i + 1}-role`] = t.reviewer_role || '';
-        modifications[`testimonial-${i + 1}-text`] = t.text_content;
-        modifications[`testimonial-${i + 1}-rating`] = String(t.rating);
-        modifications[`testimonial-${i + 1}-photo`] = t.reviewer_photo_url || '';
+        const ratingNum = Math.min(5, Math.max(1, Math.round(t.rating || 5)));
+        const stars = '★'.repeat(ratingNum) + '☆'.repeat(5 - ratingNum);
+        modifications[`testimonial-${i + 1}-name.text`] = t.reviewer_name;
+        modifications[`testimonial-${i + 1}-role.text`] = t.reviewer_role || 'Verified Customer';
+        modifications[`testimonial-${i + 1}-text.text`] = t.text_content;
+        modifications[`testimonial-${i + 1}-rating.text`] = stars;
+        if (t.reviewer_photo_url) {
+          modifications[`testimonial-${i + 1}-photo.source`] = t.reviewer_photo_url;
+        }
       });
 
-      // 6. POST to Creatomate
-      const response = await axios.post('https://api.creatomate.com/v1/renders', 
+      // 6. POST to Creatomate v2
+      const response = await axios.post('https://api.creatomate.com/v2/renders',
         {
           template_id: template.creatomate_template_id,
           modifications
@@ -126,7 +129,8 @@ const videoController = {
         { headers: { Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}` } }
       );
 
-      const renderId = response.data[0].id;
+      const renders = Array.isArray(response.data) ? response.data : [response.data];
+      const renderId = renders[0].id;
 
       // 7. Save record and update profile
       const { data: savedVideo } = await supabase
@@ -188,8 +192,8 @@ const videoController = {
         return res.status(200).json({ video });
       }
 
-      // Check Creatomate API
-      const response = await axios.get(`https://api.creatomate.com/v1/renders/${video.creatomate_render_id}`, {
+      // Check Creatomate API v2
+      const response = await axios.get(`https://api.creatomate.com/v2/renders/${video.creatomate_render_id}`, {
         headers: { Authorization: `Bearer ${process.env.CREATOMATE_API_KEY}` }
       });
 
@@ -202,7 +206,7 @@ const videoController = {
             status: 'done',
             video_url: render.url,
             thumbnail_url: render.snapshot_url,
-            duration_seconds: Math.round(render.duration),
+            duration_seconds: render.duration ? Math.round(render.duration) : null,
             updated_at: new Date().toISOString()
           })
           .eq('id', id)
