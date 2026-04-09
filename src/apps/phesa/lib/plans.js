@@ -19,24 +19,26 @@ const PLANS = {
     name: 'Free',
     price: 0,
     limits: {
-      testimonials: 20,
-      forms: 2,
+      testimonials: 10,
+      forms: 1,
       widgets: 1,
       video: false,
       screenshot: false,
       branding: true,
+      ai_analysis: 1,
     }
   },
   starter: {
     name: 'Starter',
     price: 499, // INR
     limits: {
-      testimonials: 100,
+      testimonials: 50,
       forms: 5,
       widgets: 3,
       video: false,
       screenshot: true,
       branding: false,
+      ai_analysis: 1,
     }
   },
   pro: {
