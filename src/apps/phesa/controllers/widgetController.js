@@ -259,7 +259,7 @@ const widgetController = {
           const bg = isDark ? '#1a1a1a' : '#ffffff';
           const text = isDark ? '#f0f0f0' : '#333333';
           const cardBg = isDark ? '#262626' : '#f9f9f9';
-          const border = isDark ? '#333' : '#eee';
+          const border = isDark ? '#334155' : '#eee';
            
            // --- Styles ---
            let styleText = \`
@@ -757,37 +757,89 @@ const widgetController = {
                    .phesa-right { grid-template-columns: repeat(5, 1fr); }
                  }
                \`;
+             } else if (type === 'avatar-list') {
+               styleText += \`
+                 :host {
+                   --phesa-bg: \${bg};
+                   --phesa-card-bg: \${cardBg};
+                   --phesa-text: \${text};
+                   --phesa-subtext: \${isDark ? '#94a3b8' : '#6b7280'};
+                   --phesa-accent: #f59e0b;
+                   --phesa-border: \${border};
+                   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 }
+                 .phesa-wrapper { background: var(--phesa-bg); padding: 20px; border-radius: 12px; position: relative; overflow: visible; z-index: 9999; }
+                 .phesa-avatar-row { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: center; overflow: hidden; }
+                 .phesa-avatar-item { width: 46px; height: 46px; border-radius: 50%; overflow: hidden; flex-shrink: 0; cursor: pointer; border: 3px solid transparent; transition: all 0.2s ease; background: \${isDark ? '#1e293b' : '#fff'}; display: flex; align-items: center; justify-content: center; font-weight: bold; color: \${isDark ? '#94a3b8' : '#64748b'}; }
+                 .phesa-avatar-item img { width: 100%; height: 100%; object-fit: cover; }
+                 .phesa-avatar-item:hover { transform: scale(1.08); }
+                 .phesa-avatar-item.phesa-active { border-color: var(--phesa-accent); box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
+                 .phesa-active-card { 
+                   position: absolute; 
+                   top: calc(100% + 12px); 
+                   left: 50%; 
+                   transform: translateX(-50%); 
+                   z-index: 9999;
+                   background: var(--phesa-card-bg); 
+                   border: 1px solid var(--phesa-border); 
+                   border-radius: 12px; 
+                   padding: 16px; 
+                   width: 260px;
+                   box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15); 
+                   visibility: hidden;
+                   opacity: 0;
+                   transition: all 0.3s ease;
+                 }
+                 .phesa-active-card.phesa-show {
+                   visibility: visible;
+                   opacity: 1;
+                   transform: translateX(-50%) translateY(5px);
+                 }
+                 .phesa-active-card::after {
+                   content: "";
+                   position: absolute;
+                   bottom: 100%;
+                   left: 50%;
+                   transform: translateX(-50%);
+                   border: 8px solid transparent;
+                   border-bottom-color: var(--phesa-card-bg);
+                 }
+                 .phesa-stars { color: var(--phesa-accent); font-size: 16px; margin-bottom: 8px; }
+                 .phesa-text { font-size: 14px; line-height: 1.6; color: var(--phesa-text); margin-bottom: 12px; font-style: italic; }
+                 .phesa-name { font-weight: 600; font-size: 13px; color: var(--phesa-text); }
+                 .phesa-role { font-size: 11px; color: var(--phesa-subtext); }
+               \`;
             } else if (type === 'video-slide') {
-              styleText += \`
-                :host {
-                  --phesa-bg-light: #ffffff;
-                  --phesa-bg-dark: #0f0f10;
-                  --phesa-text-light: #111;
-                  --phesa-text-dark: #fff;
-                  --phesa-accent: #7c3aed;
-                  --phesa-muted: #9ca3af;
-                }
-                .phesa-container { position: relative; width: 100%; max-width: 720px; margin: auto; }
-                .phesa-carousel { overflow: hidden; position: relative; border-radius: 12px; }
-                .phesa-track { display: flex; transition: transform 0.4s ease; }
-                .phesa-card { min-width: 100%; position: relative; background: var(--phesa-bg-light); color: var(--phesa-text-light); }
-                :host(.phesa-dark) .phesa-card { background: var(--phesa-bg-dark); color: var(--phesa-text-dark); }
-                .phesa-media { position: relative; width: 100%; height: 360px; background: #000; }
-                .phesa-media img, .phesa-media video { width: 100%; height: 100%; object-fit: cover; }
-                .phesa-play-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 50%; background: var(--phesa-accent); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
-                .phesa-play-btn::before { content: ''; border-left: 14px solid white; border-top: 10px solid transparent; border-bottom: 10px solid transparent; margin-left: 4px; }
-                .phesa-overlay { position: absolute; bottom: 0; left: 0; width: 100%; padding: 16px; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); color: white; }
-                .phesa-name { font-size: 18px; font-weight: bold; }
-                .phesa-role { font-size: 14px; color: #ddd; }
-                .phesa-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; }
-                .phesa-arrow-left { left: -18px; }
-                .phesa-arrow-right { right: -18px; }
-                .phesa-arrow::before { content: ''; border: solid white; border-width: 0 2px 2px 0; padding: 5px; display: inline-block; }
-                .phesa-arrow-left::before { transform: rotate(135deg); }
-                .phesa-arrow-right::before { transform: rotate(-45deg); }
-                .phesa-badge { position: absolute; top: 12px; right: 12px; background: white; color: #333; padding: 6px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; z-index: 10; }
-                :host(.phesa-dark) .phesa-badge { background: #222; color: #fff; }
-              \`;
+               styleText += \`
+                 :host {
+                   --phesa-bg-light: #ffffff;
+                   --phesa-bg-dark: #0f0f10;
+                   --phesa-text-light: #111;
+                   --phesa-text-dark: #fff;
+                   --phesa-accent: #7c3aed;
+                   --phesa-muted: #9ca3af;
+                 }
+                 .phesa-container { position: relative; width: 100%; max-width: 720px; margin: auto; }
+                 .phesa-carousel { overflow: hidden; position: relative; border-radius: 12px; }
+                 .phesa-track { display: flex; transition: transform 0.4s ease; }
+                 .phesa-card { min-width: 100%; position: relative; background: var(--phesa-bg-light); color: var(--phesa-text-light); }
+                 :host(.phesa-dark) .phesa-card { background: var(--phesa-bg-dark); color: var(--phesa-text-dark); }
+                 .phesa-media { position: relative; width: 100%; height: 360px; background: #000; }
+                 .phesa-media img, .phesa-media video { width: 100%; height: 100%; object-fit: cover; }
+                 .phesa-play-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 64px; height: 64px; border-radius: 50%; background: var(--phesa-accent); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; }
+                 .phesa-play-btn::before { content: ''; border-left: 14px solid white; border-top: 10px solid transparent; border-bottom: 10px solid transparent; margin-left: 4px; }
+                 .phesa-overlay { position: absolute; bottom: 0; left: 0; width: 100%; padding: 16px; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); color: white; }
+                 .phesa-name { font-size: 18px; font-weight: bold; }
+                 .phesa-role { font-size: 14px; color: #ddd; }
+                 .phesa-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; }
+                 .phesa-arrow-left { left: -18px; }
+                 .phesa-arrow-right { right: -18px; }
+                 .phesa-arrow::before { content: ''; border: solid white; border-width: 0 2px 2px 0; padding: 5px; display: inline-block; }
+                 .phesa-arrow-left::before { transform: rotate(135deg); }
+                 .phesa-arrow-right::before { transform: rotate(-45deg); }
+                 .phesa-badge { position: absolute; top: 12px; right: 12px; background: white; color: #333; padding: 6px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; z-index: 10; }
+                 :host(.phesa-dark) .phesa-badge { background: #222; color: #fff; }
+               \`;
             } else {
               styleText += \`
                 .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 8px; }
@@ -822,10 +874,10 @@ const widgetController = {
            
            style.textContent = styleText;
 
-           const testimonials = \${JSON.stringify(tests)};
-           const showRatings = \${widget.show_ratings};
-           const showPhotos = \${widget.show_photos};
-           const brandingOn = \${brandingOn};
+           const testimonials = ${JSON.stringify(tests)};
+           const showRatings = ${widget.show_ratings};
+           const showPhotos = ${widget.show_photos};
+           const brandingOn = ${brandingOn};
 
           if (testimonials.length === 0) return;
 
@@ -1273,6 +1325,63 @@ const widgetController = {
                     };
                  });
                };
+
+               render();
+            } else if (type === 'avatar-list') {
+               wrapper.innerHTML = \`
+                 <div class="phesa-avatar-row" id="phesaAvatarRow"></div>
+                 <div id="phesaActiveCard" class="phesa-active-card"></div>
+               \`;
+
+               const row = wrapper.querySelector('#phesaAvatarRow');
+               const card = wrapper.querySelector('#phesaActiveCard');
+               let activeIdx = -1;
+
+               const render = () => {
+                 // Render Row
+                 row.innerHTML = testimonials.slice(0, 10).map((t, i) => {
+                   const isActive = i === activeIdx;
+                   const avatarText = t.reviewer_name ? escHtml(t.reviewer_name.charAt(0)) : '?';
+                   return \`
+                     <div class="phesa-avatar-item \${isActive ? 'phesa-active' : ''}" data-idx="\${i}">
+                       \${t.reviewer_photo_url ? \`<img src="\${escHtml(t.reviewer_photo_url)}" />\` : avatarText}
+                     </div>
+                   \`;
+                 }).join('');
+
+                 // Render Card
+                 if (activeIdx >= 0) {
+                   const t = testimonials[activeIdx];
+                   const stars = "★".repeat(t.rating || 5) + "☆".repeat(5 - (t.rating || 5));
+                   const rolePart = [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
+                   card.innerHTML = \`
+                     <div class="phesa-stars">\${stars}</div>
+                     <div class="phesa-text">"\${escHtml(t.text_content || '')}"</div>
+                     <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
+                     <div class="phesa-role">\${escHtml(rolePart)}</div>
+                   \`;
+                   card.classList.add('phesa-show');
+                 } else {
+                   card.classList.remove('phesa-show');
+                 }
+
+                 row.querySelectorAll('.phesa-avatar-item').forEach(item => {
+                    item.onclick = (e) => {
+                      e.stopPropagation();
+                      const targetIdx = parseInt(item.dataset.idx);
+                      activeIdx = (activeIdx === targetIdx) ? -1 : targetIdx;
+                      render();
+                    };
+                 });
+               };
+
+               // Click outside handler
+               document.addEventListener('click', (e) => {
+                 if (!wrapper.contains(e.target)) {
+                   activeIdx = -1;
+                   render();
+                 }
+               });
 
                render();
             } else if (type === 'minimal-centered') {
