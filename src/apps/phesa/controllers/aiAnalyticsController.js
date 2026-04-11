@@ -18,7 +18,7 @@ const aiAnalyticsController = {
         .select('plan, ai_analyses_used_lifetime, ai_analyses_used_this_month, ai_analyses_reset_at')
         .eq('id', userId)
         .single();
-      
+
       if (profileError) throw profileError;
 
       let current_month_used = profile.ai_analyses_used_this_month || 0;
@@ -30,9 +30,9 @@ const aiAnalyticsController = {
         current_month_used = 0;
         await supabase
           .from('profiles')
-          .update({ 
-            ai_analyses_used_this_month: 0, 
-            ai_analyses_reset_at: now.toISOString() 
+          .update({
+            ai_analyses_used_this_month: 0,
+            ai_analyses_reset_at: now.toISOString()
           })
           .eq('id', userId);
       }
@@ -43,7 +43,7 @@ const aiAnalyticsController = {
         .select('id')
         .eq('user_id', userId)
         .maybeSingle();
-      
+
       const google_connected = !!gbp;
 
       // 3. Count Testimonials (Calculate both total and approved)
@@ -65,7 +65,7 @@ const aiAnalyticsController = {
 
       // 4. Plan Limits
       const plan = profile.plan || 'free';
-      const limit = plan === 'pro' ? 3 : 1; 
+      const limit = plan === 'pro' ? 3 : 1;
       let calls_used = (plan === 'free') ? (profile.ai_analyses_used_lifetime || 0) : current_month_used;
       let calls_remaining = Math.max(0, limit - calls_used);
 
@@ -137,13 +137,13 @@ const aiAnalyticsController = {
 
       // 3. Format Context for Claude
       const businessName = profile.business_name || 'Our Premium Business';
-      const formattedReviews = testimonials.map(t => 
+      const formattedReviews = testimonials.map(t =>
         `[${t.source}] ${t.reviewer_name} (${t.reviewer_role || 'Customer'}): ${t.rating}/5 - ${t.text_content}`
       ).join('\n');
 
-      const screenshotUrls = (plan !== 'free') 
-                             ? testimonials.filter(t => t.screenshot_url).map(t => t.screenshot_url)
-                             : [];
+      const screenshotUrls = (plan !== 'free')
+        ? testimonials.filter(t => t.screenshot_url).map(t => t.screenshot_url)
+        : [];
 
       const basePrompt = `You are a business analyst helping an Indian small business owner understand their customer feedback. Business: ${businessName}.
 Total reviews: ${testimonials.length} (${testimonials.filter(t => t.source === 'google').length} Google, ${testimonials.filter(t => t.source === 'form').length} form submissions, ${testimonials.filter(t => t.source === 'manual').length} manual entries).
