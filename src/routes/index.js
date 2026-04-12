@@ -7,6 +7,8 @@ const srikrishnaAartiRoutes = require('../apps/srikrishna-aarti/routes');
 const shivjiPujaRoutes = require('../apps/shivji-puja/routes');
 const hanumanjiPujaRoutes = require('../apps/hanumanji-puja/routes');
 const phesaRoutes = require('../apps/phesa');
+const uploadFileRoutes = require('../apps/uploadFile');
+
 
 router.get('/health', (req, res) => res.json({ status: 'up' }));
 router.use('/greeting-app', greetingRoutes);
@@ -16,5 +18,7 @@ router.use('/srikrishna-aarti', srikrishnaAartiRoutes);
 router.use('/shivji-puja', shivjiPujaRoutes);
 router.use('/hanumanji-puja', hanumanjiPujaRoutes);
 router.use('/phesa', phesaRoutes);
+router.use('/upload', uploadFileRoutes);
+
 
 module.exports = router;
