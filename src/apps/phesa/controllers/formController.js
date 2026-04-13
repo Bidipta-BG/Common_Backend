@@ -156,6 +156,14 @@ const formController = {
 
       // CASE 2: No/Unprivileged auth — expose only fields needed by the public template renderer.
       // Field visibility settings are intentionally included so templates can show/hide fields correctly.
+
+      // Fetch business logo URL from form owner's profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('business_logo_url')
+        .eq('id', form.user_id)
+        .single();
+
       const publicForm = {
         id:                form.id,
         title:             form.title,
@@ -169,7 +177,9 @@ const formController = {
         show_role:         form.show_role     ?? true,
         show_company:      form.show_company  ?? true,
         show_photo:        form.show_photo    ?? true,
+        show_logo:         form.show_logo     ?? false,
         button_text:       form.button_text   || 'Submit Testimonial',
+        business_logo_url: profile?.business_logo_url || null,
       };
 
       res.status(200).json({ form: publicForm });
