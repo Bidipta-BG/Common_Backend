@@ -37,6 +37,7 @@ const formController = {
         show_role    = true,
         show_company = true,
         show_photo   = true,
+        show_logo    = false,
         button_text  = 'Submit Testimonial',
       } = req.body;
 
@@ -97,6 +98,7 @@ const formController = {
         show_role:    !!show_role,
         show_company: !!show_company,
         show_photo:   !!show_photo,
+        show_logo:    !!show_logo,
         button_text,
       };
 
@@ -151,7 +153,19 @@ const formController = {
 
       // CASE 1: Has valid Auth Token corresponding to target row Object user
       if (userId && form.user_id === userId) {
-        return res.status(200).json({ form });
+        // Even for owners, we should fetch the business logo to ensure the preview/share link works correctly if they are logged in
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('business_logo_url')
+          .eq('id', form.user_id)
+          .single();
+
+        return res.status(200).json({ 
+          form: {
+            ...form,
+            business_logo_url: profile?.business_logo_url || null
+          }
+        });
       }
 
       // CASE 2: No/Unprivileged auth — expose only fields needed by the public template renderer.
@@ -198,7 +212,7 @@ const formController = {
       const {
         title, welcome_message, thank_you_message,
         collect_video, is_active, style,
-        show_email, show_role, show_company, show_photo, button_text,
+        show_email, show_role, show_company, show_photo, show_logo, button_text,
       } = req.body;
 
       // Check ownership
@@ -247,6 +261,7 @@ const formController = {
       if (show_role !== undefined)         updates.show_role    = !!show_role;
       if (show_company !== undefined)      updates.show_company = !!show_company;
       if (show_photo !== undefined)        updates.show_photo   = !!show_photo;
+      if (show_logo !== undefined)         updates.show_logo    = !!show_logo;
       if (button_text !== undefined)       updates.button_text  = button_text;
 
       if (Object.keys(updates).length === 0) {
