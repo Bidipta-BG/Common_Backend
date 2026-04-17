@@ -36,7 +36,10 @@ const testimonialController = {
 
       if (error) throw error;
 
-      res.status(200).json({ testimonials: data });
+      const l = parseInt(limit) || 10;
+      const totalPages = Math.ceil((count || 0) / l);
+
+      res.status(200).json({ testimonials: data, totalCount: count || 0, totalPages });
     } catch (error) {
       console.error('Error in getAll testimonials:', error);
       res.status(500).json({ error: 'Internal server error' });
