@@ -1141,7 +1141,6 @@ const widgetController = {
                      <div class="phesa-back-name">\${escHtml(t.reviewer_name)}</div>
                      <div class="phesa-back-role">\${escHtml(roleText(t))}</div>
                      <div class="phesa-text">"\${escHtml(t.text_content || '')}"</div>
-                     \${t.video_url ? \`<a href="\${escHtml(t.video_url)}" target="_blank" class="phesa-video-link">▶ Play Video</a>\` : ""}
                    </div>
                  </div>
                </div>
@@ -1539,7 +1538,7 @@ const widgetController = {
                const rolePart = [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
                left.innerHTML = \`
                  <div class="phesa-quote">“</div>
-                 <div class="phesa-text">\${escHtml(t.text_content || '')}</div>
+                 <div class="phesa-text">"\${escHtml(t.text_content || '')}"</div>
                  <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
                  <div class="phesa-role">\${escHtml(rolePart)}</div>
                \`;
@@ -1651,6 +1650,7 @@ const widgetController = {
       })();
     `;
 
+      res.setHeader('Content-Type', 'application/javascript');
       res.send(script);
     } catch (error) {
       console.error('Error serving widget script:', error);
