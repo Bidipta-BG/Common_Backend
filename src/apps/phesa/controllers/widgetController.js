@@ -264,7 +264,7 @@ const widgetController = {
            // --- Styles ---
            let styleText = \`
              :host { display: block; width: 100%; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box; }
-             .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 8px; }
+             .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 12px; }
              .phesa-branding { text-align: center; margin-top: 20px; font-size: 12px; }
              .phesa-branding a { color: #0f3460; text-decoration: none; font-weight: bold; }
            \`;
@@ -451,7 +451,7 @@ const widgetController = {
                  background: var(--phesa-bg);
                  padding: 30px;
                  overflow: hidden;
-                 border-radius: 8px;
+                 border-radius: 12px;
                }
                .phesa-row {
                  display: flex;
@@ -543,7 +543,7 @@ const widgetController = {
                  flex-direction: column;
                  gap: 20px;
                  overflow: hidden;
-                 border-radius: 8px;
+                 border-radius: 12px;
                }
                .phesa-row {
                  display: flex;
@@ -598,7 +598,7 @@ const widgetController = {
                  flex-direction: column;
                  gap: 12px;
                  overflow: hidden;
-                 border-radius: 8px;
+                 border-radius: 12px;
                }
                .phesa-row {
                  display: flex;
@@ -643,7 +643,7 @@ const widgetController = {
                  --phesa-subtext: #94a3b8;
                  --phesa-border: #334155;
                }
-               .phesa-wrapper { background: var(--phesa-bg); padding: 24px; border-radius: 8px; }
+               .phesa-wrapper { background: var(--phesa-bg); padding: 24px; border-radius: 12px; }
                .phesa-grid { 
                  columns: 3 280px; 
                  column-gap: 20px; 
@@ -685,21 +685,21 @@ const widgetController = {
                  --phesa-dynamic-text: #ffffff;
                  --phesa-text: #f9fafb;
                }
-               .phesa-wrapper { background: var(--phesa-bg); border-radius: 8px; overflow: hidden; }
+               .phesa-wrapper { background: var(--phesa-bg); border-radius: 16px; overflow: hidden; }
                .phesa-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
                .phesa-card { display: contents; }
-               .phesa-block { min-height: 260px; display: flex; align-items: center; justify-content: center; padding: 30px; box-sizing: border-box; }
+               .phesa-block { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; padding: 30px; box-sizing: border-box; }
                .phesa-image { padding: 0; }
                .phesa-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
                .phesa-text-block { flex-direction: column; text-align: left; align-items: flex-start; }
                .phesa-yellow { background: var(--phesa-yellow); color: #000; }
                .phesa-dynamic { background: var(--phesa-dynamic-bg); color: var(--phesa-dynamic-text); }
-               .phesa-quote { font-size: 18px; font-weight: 600; line-height: 1.5; margin-bottom: 14px; }
-               .phesa-name { font-size: 13px; font-weight: 600; }
-               .phesa-role { font-size: 12px; opacity: 0.8; }
+               .phesa-quote { font-size: 19px; font-weight: 600; line-height: 1.6; margin-bottom: 20px; font-style: italic; }
+               .phesa-name { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+               .phesa-role { font-size: 12px; opacity: 0.7; margin-top: 4px; }
                @media (max-width: 768px) {
                  .phesa-grid { grid-template-columns: 1fr; }
-                 .phesa-block { min-height: 200px; }
+                 .phesa-block { aspect-ratio: 1 / 1; }
                }
              \`;
            } else if (type === 'video-rows') {
@@ -1010,7 +1010,7 @@ const widgetController = {
               \`;
            } else {
             styleText += \`
-              .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 8px; }
+              .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 12px; }
               /* Wall (Masonry Grid Simulation) */
               .phesa-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
               
@@ -1197,9 +1197,9 @@ const widgetController = {
                  </div>
                  \${stars(t.rating)}
                  \${t.text_content ? \`<div class="phesa-text">\${escHtml(t.text_content)}</div>\` : ""}
-                 \${(t.screenshot_url || t.video_url) ? \`
+                 \${t.screenshot_url ? \`
                    <div class="phesa-media">
-                     <img src="\${escHtml(t.screenshot_url || t.video_url)}" loading="lazy" />
+                     <img src="\${escHtml(t.screenshot_url)}" loading="lazy" />
                    </div>
                  \` : ""}
                  <div class="phesa-footer"></div>
@@ -1428,9 +1428,12 @@ const widgetController = {
             const row1Html = [...row1, ...row1, ...row1].map(createCardHtml).join("");
             const row2Html = [...row2, ...row2, ...row2].map(createCardHtml).join("");
             
+            const dur1 = Math.max(row1.length * 10, 10);
+            const dur2 = Math.max(row2.length * 10, 10);
+
             wrapper.innerHTML = \`
-              <div class="phesa-row phesa-row-left">\${row1Html}</div>
-              \${row2.length > 0 ? \`<div class="phesa-row phesa-row-right">\${row2Html}</div>\` : ""}
+              <div class="phesa-row phesa-row-left" style="animation-duration: \${dur1}s">\${row1Html}</div>
+              \${row2.length > 0 ? \`<div class="phesa-row phesa-row-right" style="animation-duration: \${dur2}s">\${row2Html}</div>\` : ""}
             \`;
          } else if (type === 'pills') {
             const mid = Math.ceil(testimonials.length / 2);
@@ -1440,9 +1443,12 @@ const widgetController = {
             const row1Html = [...row1, ...row1, ...row1].map(createCardHtml).join("");
             const row2Html = [...row2, ...row2, ...row2].map(createCardHtml).join("");
             
+            const dur1 = Math.max(row1.length * 10, 10);
+            const dur2 = Math.max(row2.length * 10, 10);
+
             wrapper.innerHTML = \`
-              <div class="phesa-row phesa-row-left">\${row1Html}</div>
-              \${row2.length > 0 ? \`<div class="phesa-row phesa-row-right">\${row2Html}</div>\` : ""}
+              <div class="phesa-row phesa-row-left" style="animation-duration: \${dur1}s">\${row1Html}</div>
+              \${row2.length > 0 ? \`<div class="phesa-row phesa-row-right" style="animation-duration: \${dur2}s">\${row2Html}</div>\` : ""}
             \`;
          } else if (type === 'screenshot-grid') {
             wrapper.innerHTML = \`<div class="phesa-grid">\${testimonials.map(t => createCardHtml(t)).join("")}</div>\`;
