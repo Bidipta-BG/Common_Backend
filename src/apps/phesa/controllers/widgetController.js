@@ -251,6 +251,14 @@ const widgetController = {
           const container = document.getElementById('phesa-widget');
           if (!container) return;
           
+          // Inject Google Font into main document head for reliable loading
+          if (!document.querySelector('link[href*="fonts.googleapis.com/css2?family=Bricolage+Grotesque"]')) {
+            const fontLink = document.createElement('link');
+            fontLink.rel = 'stylesheet';
+            fontLink.href = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap';
+            document.head.appendChild(fontLink);
+          }
+          
           const shadow = container.attachShadow({ mode: 'open' });
           const style = document.createElement('style');
           
@@ -263,8 +271,8 @@ const widgetController = {
            
            // --- Styles ---
            let styleText = \`
-             :host { display: block; width: 100%; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box; }
-             .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 12px; }
+             :host { display: block; width: 100%; font-family: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif; box-sizing: border-box; }
+             .phesa-wrapper { background: \${bg}; color: \${text}; padding: 1rem; border-radius: 12px; font-family: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif; }
              .phesa-branding { text-align: center; margin-top: 20px; font-size: 12px; }
              .phesa-branding a { color: #0f3460; text-decoration: none; font-weight: bold; }
            \`;
@@ -274,20 +282,20 @@ const widgetController = {
            if (type === 'minimal-centered') {
              styleText += \`
                :host {
-                 --phesa-bg: \${bg};
-                 --phesa-text: \${text};
+                 --phesa-bg: \${isDark ? '#0f172a' : '#ffffff'};
+                 --phesa-text: \${isDark ? '#f9fafb' : '#111111'};
                  --phesa-subtext: \${isDark ? '#9ca3af' : '#6b7280'};
                  --phesa-accent: #ef4444;
                }
                .phesa-wrapper {
                  display: grid;
-                 gap: 40px;
+                 gap: 64px;
                  justify-content: center;
                  padding: 40px 20px;
                  background: var(--phesa-bg);
                }
                .phesa-card {
-                 max-width: 700px;
+                 max-width: 768px;
                  text-align: center;
                  color: var(--phesa-text);
                }
@@ -296,38 +304,40 @@ const widgetController = {
                  height: 56px;
                  border-radius: 50%;
                  object-fit: cover;
-                 margin: 0 auto 16px;
+                 margin: 0 auto 24px;
+                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                 border: 2px solid transparent;
                }
                .phesa-text {
-                 font-size: 20px;
-                 line-height: 1.5;
-                 font-weight: 600;
-                 margin-bottom: 16px;
+                 font-size: 1.25rem;
+                 line-height: 1.6;
+                 font-weight: 700;
+                 margin-bottom: 24px;
+                 font-style: italic;
+                 letter-spacing: -0.025em;
                }
                .phesa-stars {
                  color: var(--phesa-accent);
-                 font-size: 18px;
+                 font-size: 20px;
                  margin-bottom: 8px;
                }
                .phesa-meta {
-                 font-size: 14px;
-                 color: var(--phesa-subtext);
+                 margin-top: 24px;
                }
                .phesa-name {
-                 font-weight: 500;
+                 font-weight: 600;
+                 font-size: 16px;
                  color: var(--phesa-text);
+                 display: block;
                }
                .phesa-role {
                  color: var(--phesa-subtext);
+                 font-size: 14px;
+                 margin-top: 4px;
+                 display: block;
                }
-               .phesa-video {
-                 margin-top: 16px;
-               }
-               .phesa-video iframe {
-                 width: 100%;
-                 height: 200px;
-                 border-radius: 8px;
-                 border: none;
+               @media (min-width: 768px) {
+                 .phesa-text { font-size: 1.5rem; }
                }
              \`;
            } else if (type === 'modern-slider') {
@@ -339,7 +349,7 @@ const widgetController = {
                   --phesa-subtext: #6b7280;
                   --phesa-accent: #f59e0b;
                   --phesa-primary: #3b82f6;
-                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                  font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 :host(.phesa-dark) {
                   --phesa-bg: #0f172a;
@@ -438,7 +448,7 @@ const widgetController = {
                  --phesa-text: #111827;
                  --phesa-subtext: #6b7280;
                  --phesa-accent: #f59e0b;
-                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                }
                :host(.phesa-dark) {
                  --phesa-bg: #0f172a;
@@ -527,7 +537,7 @@ const widgetController = {
                  --phesa-subtext: #6b7280;
                  --phesa-border: #e5e7eb;
                  --phesa-accent: #f59e0b;
-                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                }
                :host(.phesa-dark) {
                  --phesa-bg: #0f172a;
@@ -582,7 +592,7 @@ const widgetController = {
                  --phesa-text: #111827;
                  --phesa-subtext: #6b7280;
                  --phesa-border: #e5e7eb;
-                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                }
                :host(.phesa-dark) {
                  --phesa-bg: #0f172a;
@@ -634,7 +644,7 @@ const widgetController = {
                  --phesa-subtext: #6b7280;
                  --phesa-border: #e5e7eb;
                  --phesa-accent: #7c3aed;
-                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                }
                :host(.phesa-dark) {
                  --phesa-bg: #0f172a;
@@ -677,7 +687,7 @@ const widgetController = {
                  --phesa-yellow: #fff200;
                  --phesa-dynamic-bg: #ffffff;
                  --phesa-dynamic-text: #000000;
-                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                }
                :host(.phesa-dark) {
                  --phesa-bg: #0f172a;
@@ -711,7 +721,7 @@ const widgetController = {
                  --phesa-accent: #7c3aed;
                  --phesa-card-bg: #ffffff;
                  --phesa-border: #e5e7eb;
-                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                 font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                }
                :host(.phesa-dark) {
                  --phesa-bg: #0f172a;
@@ -752,7 +762,7 @@ const widgetController = {
                   --phesa-subtext: \${isDark ? '#94a3b8' : '#6b7280'};
                   --phesa-accent: #22c55e;
                   --phesa-border: \${border};
-                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                  font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 .phesa-wrapper { background: var(--phesa-bg); padding: 24px; border-radius: 12px; }
                 .phesa-container { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: stretch; }
@@ -780,7 +790,7 @@ const widgetController = {
                   --phesa-subtext: \${isDark ? '#94a3b8' : '#6b7280'};
                   --phesa-accent: #f59e0b;
                   --phesa-border: \${border};
-                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                  font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 .phesa-wrapper { background: var(--phesa-bg); padding: 20px; border-radius: 12px; position: relative; overflow: visible; z-index: 9999; }
                 .phesa-avatar-row { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: center; overflow: hidden; }
@@ -828,18 +838,18 @@ const widgetController = {
                 :host {
                   --phesa-bg: \${bg};
                   --phesa-card-bg: \${cardBg};
-                  --phesa-text: \${text};
+                  --phesa-text: \${isDark ? '#e5e7eb' : '#1f2937'};
                   --phesa-subtext: \${isDark ? '#9ca3af' : '#6b7280'};
                   --phesa-accent: #f59e0b;
                   --phesa-border: \${border};
-                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                  font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 .phesa-wrapper { 
                   background: var(--phesa-bg); 
-                  padding: 60px 20px; 
+                  padding: 48px 20px; 
                   border-radius: 16px; 
                   border: 1px solid var(--phesa-border);
-                  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+                  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
                   position: relative;
                   overflow: hidden;
                 }
@@ -847,22 +857,28 @@ const widgetController = {
                 .phesa-track { display: flex; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
                 .phesa-slide { min-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; text-align: center; }
                 
-                .phesa-card-carousel { max-width: 600px; padding: 0 20px; display: flex; flex-direction: column; align-items: center; }
-                .phesa-stars { color: var(--phesa-accent); font-size: 24px; margin-bottom: 24px; display: flex; gap: 4px; justify-content: center; }
-                .phesa-text { font-size: 1.25rem; line-height: 1.6; font-weight: 500; margin-bottom: 30px; color: var(--phesa-text); }
-                .phesa-footer { display: flex; align-items: center; gap: 12px; margin-top: auto; }
-                 .phesa-video-icon { color: \${isDark ? '#64748b' : '#94a3b8'}; margin-left: 12px; width: 20px; height: 20px; flex-shrink: 0; opacity: 0.7; }
+                .phesa-card-carousel { max-width: 700px; padding: 0 40px; display: flex; flex-direction: column; align-items: center; }
+                .phesa-stars { color: #facc15; font-size: 24px; margin-bottom: 32px; display: flex; gap: 4px; justify-content: center; }
+                .phesa-text { 
+                  font-size: 1.25rem; 
+                  line-height: 1.6; 
+                  font-weight: 500; 
+                  margin-bottom: 40px; 
+                  color: var(--phesa-text); 
+                  letter-spacing: -0.025em; 
+                }
+                .phesa-footer { display: flex; align-items: center; gap: 16px; margin-top: auto; }
                 .phesa-avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
                 .phesa-meta { text-align: left; }
-                .phesa-name { font-weight: 700; font-size: 15px; margin: 0; }
-                .phesa-role { font-size: 13px; color: var(--phesa-subtext); margin: 2px 0 0; }
+                .phesa-name { font-weight: 700; font-size: 15px; margin: 0; color: \${isDark ? '#fff' : '#111827'}; }
+                .phesa-role { font-size: 13px; color: var(--phesa-subtext); margin: 2px 0 0; font-weight: 500; }
                 
                 .phesa-arrow { 
                   position: absolute; 
                   top: 50%; 
                   transform: translateY(-50%); 
-                  width: 44px; 
-                  height: 44px; 
+                  width: 40px; 
+                  height: 40px; 
                   background: \${isDark ? '#1e293b' : '#ffffff'}; 
                   border: 2px solid \${isDark ? '#334155' : '#f3f4f6'};
                   border-radius: 50%; 
@@ -877,12 +893,11 @@ const widgetController = {
                   padding: 0;
                 }
                 .phesa-arrow:hover { transform: translateY(-50%) scale(1.1); background: \${isDark ? '#334155' : '#f9fafb'}; }
-                .phesa-arrow:active { transform: translateY(-50%) scale(0.95); }
-                .phesa-arrow svg { width: 24px; height: 24px; fill: currentColor; }
+                .phesa-arrow svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; }
                 .phesa-arrow-left { left: 16px; }
                 .phesa-arrow-right { right: 16px; }
                 
-                .phesa-dots { display: flex; justify-content: center; gap: 10px; margin-top: 32px; }
+                .phesa-dots { display: flex; justify-content: center; gap: 10px; margin-top: 40px; }
                 .phesa-dot { 
                   height: 10px; 
                   border-radius: 5px; 
@@ -892,13 +907,16 @@ const widgetController = {
                   width: 10px;
                 }
                 .phesa-dot.active { width: 32px; background: \${isDark ? '#fff' : '#000'}; }
-                .phesa-dot:hover:not(.active) { background: \${isDark ? '#475569' : '#d1d5db'}; }
+
+                @media (min-width: 640px) {
+                  .phesa-text { font-size: 1.5rem; }
+                  .phesa-wrapper { padding: 48px 48px; }
+                }
 
                 @media (max-width: 640px) {
-                  .phesa-wrapper { padding: 40px 10px; }
+                  .phesa-card-carousel { padding: 0 10px; }
                   .phesa-text { font-size: 1.1rem; }
-                  .phesa-arrow { width: 36px; height: 36px; }
-                  .phesa-arrow svg { width: 20px; height: 20px; }
+                  .phesa-arrow { width: 32px; height: 32px; }
                   .phesa-arrow-left { left: 8px; }
                   .phesa-arrow-right { right: 8px; }
                 }
@@ -1081,9 +1099,8 @@ const widgetController = {
                 <div class="phesa-stars">\${stars}</div>
                 <div class="phesa-meta">
                   <span class="phesa-name">\${escHtml(t.reviewer_name)}</span>
-                  \${rolePart ? \`<span class="phesa-role"> / \${escHtml(rolePart)}</span>\` : ""}
+                  \${rolePart ? \`<span class="phesa-role">\${escHtml(rolePart)}</span>\` : ""}
                 </div>
-
               </div>
             \`;
           } else if (type === 'modern-slider') {
@@ -1163,7 +1180,6 @@ const widgetController = {
                    <div class="phesa-stars">\${renderStars(t.rating)}</div>
                    <div class="phesa-text">"\${escHtml(t.text_content || '')}"</div>
                  </div>
-                 \${t.video_url ? \`<a href="\${escHtml(t.video_url)}" target="_blank" class="phesa-video-link" style="margin-top:10px;">▶ Watch Video</a>\` : ""}
                </div>
              \`;
           } else if (type === 'pills') {
