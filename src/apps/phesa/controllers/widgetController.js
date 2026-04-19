@@ -78,7 +78,7 @@ const widgetController = {
           theme: theme || 'light',
           show_ratings: show_ratings !== false,
           show_photos: show_photos !== false,
-          max_items: max_items || 10
+          max_items: max_items === 'all' ? 200 : (parseInt(max_items) || 10)
         })
         .select()
         .single();
@@ -128,6 +128,11 @@ const widgetController = {
 
       // Build safe updates payload
       const updates = { ...req.body };
+      if (updates.max_items === 'all') {
+        updates.max_items = 200;
+      } else if (updates.max_items) {
+        updates.max_items = parseInt(updates.max_items) || 10;
+      }
       delete updates.id;
       delete updates.user_id;
       delete updates.created_at;
@@ -1655,7 +1660,7 @@ const widgetController = {
                  const avatarText = t.reviewer_name ? escHtml(t.reviewer_name.charAt(0)) : '?';
                  return \`
                    <div class="phesa-avatar-item \${isActive ? 'phesa-active' : ''}" data-idx="\${i}">
-                     \${t.reviewer_photo_url ? \`<img src="\${escHtml(t.reviewer_photo_url)}" />\` : avatarText}
+                      \${(showPhotos && t.reviewer_photo_url) ? \`<img src="\${escHtml(t.reviewer_photo_url)}" />\` : avatarText}
                    </div>
                  \`;
                }).join('');
@@ -1666,7 +1671,7 @@ const widgetController = {
                  const stars = "★".repeat(t.rating || 5) + "☆".repeat(5 - (t.rating || 5));
                  const rolePart = [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
                  card.innerHTML = \`
-                   <div class="phesa-stars">\${stars}</div>
+                    \${showRatings ? \`<div class="phesa-stars">\${stars}</div>\` : ''}
                    <div class="phesa-text">"\${escHtml(t.text_content || '')}"</div>
                    <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
                    <div class="phesa-role">\${escHtml(rolePart)}</div>
