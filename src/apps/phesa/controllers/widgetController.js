@@ -25,8 +25,8 @@ const widgetController = {
       if (analyticsError) {
         console.error('Error fetching analytics:', analyticsError);
         // Fallback: return widgets with 0 views if analytics fails
-        return res.status(200).json({ 
-          widgets: widgets.map(w => ({ ...w, view_count: 0 })) 
+        return res.status(200).json({
+          widgets: widgets.map(w => ({ ...w, view_count: 0 }))
         });
       }
 
@@ -99,14 +99,14 @@ const widgetController = {
         .select('*')
         .eq('id', req.params.id)
         .single();
-      
+
       if (error && error.code === 'PGRST116') return res.status(404).json({ error: 'Not found' });
       if (error) throw error;
-      
+
       if (data.user_id !== req.userId) {
         return res.status(403).json({ error: 'Forbidden' });
       }
-      
+
       res.status(200).json({ widget: data });
     } catch (error) {
       console.error('Error getOne widget:', error);
@@ -122,7 +122,7 @@ const widgetController = {
         .select('user_id')
         .eq('id', req.params.id)
         .single();
-        
+
       if (!existing) return res.status(404).json({ error: 'Not found' });
       if (existing.user_id !== req.userId) return res.status(403).json({ error: 'Forbidden' });
 
@@ -155,7 +155,7 @@ const widgetController = {
         .select('user_id')
         .eq('id', req.params.id)
         .single();
-        
+
       if (!existing) return res.status(404).json({ error: 'Not found' });
       if (existing.user_id !== req.userId) return res.status(403).json({ error: 'Forbidden' });
 
@@ -243,7 +243,7 @@ const widgetController = {
       supabase.from('widget_analytics')
         .insert({ widget_id: widgetId, user_id: widget.user_id })
         .then()
-        .catch(() => {});
+        .catch(() => { });
 
       // 4. Construct isolated shadow dom script
       const script = `
@@ -858,7 +858,7 @@ const widgetController = {
                 .phesa-slide { min-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; text-align: center; }
                 
                 .phesa-card-carousel { max-width: 700px; padding: 0 40px; display: flex; flex-direction: column; align-items: center; }
-                .phesa-stars { color: #facc15; font-size: 24px; margin-bottom: 32px; display: flex; gap: 4px; justify-content: center; }
+                .phesa-stars { color: #facc15; font-size: 28px; margin-bottom: 32px; display: flex; gap: 6px; justify-content: center; }
                 .phesa-text { 
                   font-size: 1.25rem; 
                   line-height: 1.6; 
@@ -981,7 +981,7 @@ const widgetController = {
                 }
                 .phesa-stars { 
                   color: #facc15; 
-                  font-size: 16px; 
+                  font-size: 20px; 
                   margin-bottom: 16px; 
                   display: flex; 
                   gap: 4px; 
@@ -998,8 +998,7 @@ const widgetController = {
                   display: flex; 
                   align-items: center; 
                   gap: 12px; 
-                  padding-top: 16px;
-                  border-top: 1px solid \${isDark ? '#334155' : '#f1f5f9'};
+                  padding-top: 8px;
                 }
                 .phesa-avatar { 
                   width: 44px; 
@@ -1072,7 +1071,16 @@ const widgetController = {
 
         const renderStars = (rating) => {
           if (!showRatings || !rating) return '';
-          return '<div class="phesa-stars">' + '★'.repeat(rating) + '☆'.repeat(5-rating) + '</div>';
+          let starsHtml = '<div class="phesa-stars">';
+          for (let i = 0; i < 5; i++) {
+            const isActive = i < rating;
+            starsHtml += \`
+              <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="\${isActive ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: \${isActive ? '#facc15' : '#d1d5db'}; filter: \${isActive ? 'drop-shadow(0 1px 1px rgba(0,0,0,0.05))' : 'none'};">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>\`;
+          }
+          starsHtml += '</div>';
+          return starsHtml;
         };
 
         const renderAvatar = (t) => {
@@ -1086,7 +1094,9 @@ const widgetController = {
 
         const createCardHtml = (t, idx) => {
           if (type === 'minimal-centered') {
-            const stars = "★".repeat(t.rating || 5) + "☆".repeat(5 - (t.rating || 5));
+            const stars = '<div class="phesa-stars" style="color: #ef4444; font-size: 20px; justify-content: center; display: flex; gap: 2px;">' + 
+                          '★'.repeat(t.rating || 5) + '☆'.repeat(5 - (t.rating || 5)) + 
+                          '</div>';
             const rolePart = [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
             const avatarHtml = t.reviewer_photo_url 
               ? \`<img class="phesa-avatar" src="\${escHtml(t.reviewer_photo_url)}" alt="\${escHtml(t.reviewer_name)}"/>\`
@@ -1130,7 +1140,9 @@ const widgetController = {
                    </div>
                  </div>
                  <div class="phesa-body">
-                   \${renderStars(t.rating)}
+                   <div class="phesa-stars" style="color: #f59e0b; font-size: 18px; display: flex; gap: 2px; margin-bottom: 12px;">
+                     \${'★'.repeat(t.rating || 5) + '☆'.repeat(5 - (t.rating || 5))}
+                   </div>
                    <div class="phesa-text">
                      "\${escHtml(t.text_content || '')}"
                    </div>
@@ -1139,7 +1151,7 @@ const widgetController = {
              \`;
           } else if (type === 'flip-card') {
              const roleText = (t) => [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
-             const stars = (t) => "★".repeat(t.rating || 5) + "☆".repeat(5 - (t.rating || 5));
+             const stars = (t) => renderStars(t.rating || 5);
              
              return \`
                <div class="phesa-card">
