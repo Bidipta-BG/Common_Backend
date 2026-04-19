@@ -1514,21 +1514,41 @@ const widgetController = {
             const prev = wrapper.querySelector('#phesaPrev');
             const next = wrapper.querySelector('#phesaNext');
             let cur = 0;
-            
             const update = () => {
               track.style.transform = 'translateX(-' + (cur * 100) + '%)';
             };
-            
+            let isAutoPaused = false;
+            let autoInterval = setInterval(() => {
+              if (!isAutoPaused) {
+                cur = (cur + 1) % testimonials.length;
+                update();
+              }
+            }, 3000);
+
+            const resetInterval = () => {
+              clearInterval(autoInterval);
+              autoInterval = setInterval(() => {
+                if (!isAutoPaused) {
+                  cur = (cur + 1) % testimonials.length;
+                  update();
+                }
+              }, 3000);
+            };
+
             next.onclick = (e) => {
               e.preventDefault();
+              isAutoPaused = false;
               cur = (cur + 1) % testimonials.length;
               update();
+              resetInterval();
             };
             
             prev.onclick = (e) => {
               e.preventDefault();
+              isAutoPaused = false;
               cur = (cur - 1 + testimonials.length) % testimonials.length;
               update();
+              resetInterval();
             };
             
             track.onclick = (e) => {
@@ -1536,6 +1556,7 @@ const widgetController = {
               if (btn) {
                 const video = btn.parentElement.querySelector('video');
                 if (video) {
+                  isAutoPaused = true;
                   video.play();
                   btn.style.display = 'none';
                   video.controls = true;
