@@ -199,14 +199,18 @@ const widgetController = {
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
+      let limit = 10;
+      const m = widget.max_items;
+
       if (widget.type === 'avatar-list') {
-        const userLimit = widget.max_items === 'all' ? 15 : (parseInt(widget.max_items) || 10);
-        testimonialsQuery.limit(Math.min(userLimit, 15));
-      } else if (widget.max_items && widget.max_items !== 'all') {
-        testimonialsQuery.limit(parseInt(widget.max_items));
-      } else if (!widget.max_items) {
-        testimonialsQuery.limit(10);
+        limit = (m === 'all' || m === 200) ? 15 : Math.min(Number(m) || 10, 15);
+      } else if (widget.type === 'avatar-select') {
+        limit = (m === 'all' || m === 200) ? 20 : Math.min(Number(m) || 10, 20);
+      } else {
+        if (m === 'all' || m === 200) limit = 200;
+        else limit = Number(m) || 10;
       }
+      testimonialsQuery.limit(limit);
 
       const { data: testimonials } = await testimonialsQuery;
 
@@ -249,14 +253,18 @@ const widgetController = {
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
+      let limit = 10;
+      const m = widget.max_items;
+
       if (widget.type === 'avatar-list') {
-        const userLimit = widget.max_items === 'all' ? 15 : (parseInt(widget.max_items) || 10);
-        testimonialsQuery.limit(Math.min(userLimit, 15));
-      } else if (widget.max_items && widget.max_items !== 'all') {
-        testimonialsQuery.limit(parseInt(widget.max_items));
-      } else if (!widget.max_items) {
-        testimonialsQuery.limit(10);
+        limit = (m === 'all' || m === 200) ? 15 : Math.min(Number(m) || 10, 15);
+      } else if (widget.type === 'avatar-select') {
+        limit = (m === 'all' || m === 200) ? 20 : Math.min(Number(m) || 10, 20);
+      } else {
+        if (m === 'all' || m === 200) limit = 200;
+        else limit = Number(m) || 10;
       }
+      testimonialsQuery.limit(limit);
 
       const { data: testimonials } = await testimonialsQuery;
 
@@ -792,7 +800,8 @@ const widgetController = {
                 .phesa-wrapper { background: var(--phesa-bg); padding: 24px; border-radius: 12px; }
                 .phesa-container { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: stretch; }
                 .phesa-left { background: var(--phesa-card-bg); border-radius: 12px; padding: 30px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--phesa-border); }
-                .phesa-quote { font-size: 32px; color: var(--phesa-accent); margin-bottom: 12px; line-height: 1; }
+                .phesa-quote { font-size: 32px; color: var(--phesa-accent); margin-bottom: 6px; line-height: 1; }
+                .phesa-stars { color: #f59e0b; font-size: 18px; margin-bottom: 12px; height: 20px; }
                 .phesa-text { font-size: 18px; line-height: 1.6; color: var(--phesa-text); margin-bottom: 20px; font-style: italic; }
                 .phesa-name { font-weight: 600; font-size: 14px; color: var(--phesa-text); }
                 .phesa-role { font-size: 12px; color: var(--phesa-subtext); }
@@ -1616,8 +1625,10 @@ const widgetController = {
                // Update Left
                const t = testimonials[activeIdx];
                const rolePart = [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
-               left.innerHTML = \`
-                 <div class="phesa-quote">“</div>
+                const starHtml = showRatings ? \`<div class="phesa-stars">\${"★".repeat(t.rating || 5) + "☆".repeat(5 - (t.rating || 5))}</div>\` : '';
+                left.innerHTML = \`
+                  <div class="phesa-quote">“</div>
+                  \${starHtml}
                  <div class="phesa-text">"\${escHtml(t.text_content || '')}"</div>
                  <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
                  <div class="phesa-role">\${escHtml(rolePart)}</div>
@@ -1629,7 +1640,7 @@ const widgetController = {
                  const avatarText = t.reviewer_name ? escHtml(t.reviewer_name.charAt(0)) : '?';
                  return \`
                    <div class="phesa-avatar-box \${isActive ? 'phesa-active' : ''}" data-idx="\${i}">
-                     \${t.reviewer_photo_url ? \`<img src="\${escHtml(t.reviewer_photo_url)}" />\` : avatarText}
+                      \${(showPhotos && t.reviewer_photo_url) ? \`<img src="\${escHtml(t.reviewer_photo_url)}" />\` : avatarText}
                    </div>
                  \`;
                }).join('');
