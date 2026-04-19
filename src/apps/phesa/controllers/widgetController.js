@@ -768,7 +768,7 @@ const widgetController = {
                 .phesa-container { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: stretch; }
                 .phesa-left { background: var(--phesa-card-bg); border-radius: 12px; padding: 30px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--phesa-border); }
                 .phesa-quote { font-size: 32px; color: var(--phesa-accent); margin-bottom: 12px; line-height: 1; }
-                .phesa-text { font-size: 16px; line-height: 1.6; color: var(--phesa-text); margin-bottom: 20px; font-style: italic; }
+                .phesa-text { font-size: 18px; line-height: 1.6; color: var(--phesa-text); margin-bottom: 20px; font-style: italic; }
                 .phesa-name { font-weight: 600; font-size: 14px; color: var(--phesa-text); }
                 .phesa-role { font-size: 12px; color: var(--phesa-subtext); }
                 .phesa-right { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-content: start; }
