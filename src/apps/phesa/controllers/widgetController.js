@@ -180,20 +180,30 @@ const widgetController = {
 
       const { data: widget } = await supabase
         .from('widgets')
-        .select('user_id, max_items')
+        .select('user_id, max_items, type')
         .eq('id', widgetId)
         .single();
 
       if (!widget) return res.status(404).json({ error: 'Widget not found' });
 
       // Fetch only approved, apply widget max_items
-      const { data: testimonials } = await supabase
+      const testimonialsQuery = supabase
         .from('testimonials')
         .select('id, reviewer_name, reviewer_role, reviewer_company, reviewer_photo_url, rating, text_content, video_url, created_at')
         .eq('user_id', widget.user_id)
         .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-        .limit(widget.max_items || 10);
+        .order('created_at', { ascending: false });
+
+      if (widget.type === 'avatar-list') {
+        const userLimit = widget.max_items === 'all' ? 15 : (parseInt(widget.max_items) || 10);
+        testimonialsQuery.limit(Math.min(userLimit, 15));
+      } else if (widget.max_items && widget.max_items !== 'all') {
+        testimonialsQuery.limit(parseInt(widget.max_items));
+      } else if (!widget.max_items) {
+        testimonialsQuery.limit(10);
+      }
+
+      const { data: testimonials } = await testimonialsQuery;
 
       res.status(200).json({ testimonials: testimonials || [] });
     } catch (error) {
@@ -227,13 +237,23 @@ const widgetController = {
       }
 
       // 2. Fetch highly vetted Approved Testimonials based on owner
-      const { data: testimonials } = await supabase
+      const testimonialsQuery = supabase
         .from('testimonials')
         .select('reviewer_name, reviewer_role, reviewer_company, reviewer_photo_url, rating, text_content, video_url, screenshot_url')
         .eq('user_id', widget.user_id)
         .eq('status', 'approved')
-        .order('created_at', { ascending: false })
-        .limit(widget.max_items || 10);
+        .order('created_at', { ascending: false });
+
+      if (widget.type === 'avatar-list') {
+        const userLimit = widget.max_items === 'all' ? 15 : (parseInt(widget.max_items) || 10);
+        testimonialsQuery.limit(Math.min(userLimit, 15));
+      } else if (widget.max_items && widget.max_items !== 'all') {
+        testimonialsQuery.limit(parseInt(widget.max_items));
+      } else if (!widget.max_items) {
+        testimonialsQuery.limit(10);
+      }
+
+      const { data: testimonials } = await testimonialsQuery;
 
       const tests = testimonials || [];
       const plan = Array.isArray(widget.profiles) ? widget.profiles[0]?.plan : widget.profiles?.plan;
@@ -793,7 +813,7 @@ const widgetController = {
                   font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 .phesa-wrapper { background: var(--phesa-bg); padding: 20px; border-radius: 12px; position: relative; overflow: visible; z-index: 9999; }
-                .phesa-avatar-row { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: center; overflow: hidden; }
+                .phesa-avatar-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; overflow: hidden; }
                 .phesa-avatar-item { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; transition: all 0.2s ease; background: \${isDark ? '#1e293b' : '#fff'}; display: flex; align-items: center; justify-content: center; font-weight: bold; color: \${isDark ? '#94a3b8' : '#64748b'}; }
                 .phesa-avatar-item img { width: 100%; height: 100%; object-fit: cover; }
                 .phesa-avatar-item:hover { transform: scale(1.08); }
@@ -1630,7 +1650,7 @@ const widgetController = {
 
              const render = () => {
                // Render Row
-               row.innerHTML = testimonials.slice(0, 10).map((t, i) => {
+               row.innerHTML = testimonials.slice(0, 15).map((t, i) => {
                  const isActive = i === activeIdx;
                  const avatarText = t.reviewer_name ? escHtml(t.reviewer_name.charAt(0)) : '?';
                  return \`
