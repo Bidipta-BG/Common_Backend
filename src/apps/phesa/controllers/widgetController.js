@@ -784,17 +784,17 @@ const widgetController = {
             } else if (type === 'avatar-list') {
               styleText += \`
                 :host {
-                  --phesa-bg: \${bg};
-                  --phesa-card-bg: \${cardBg};
-                  --phesa-text: \${text};
+                  --phesa-bg: \${isDark ? '#0f172a' : '#f5f6f8'};
+                  --phesa-card-bg: \${isDark ? '#1e293b' : '#ffffff'};
+                  --phesa-text: \${isDark ? '#f9fafb' : '#111827'};
                   --phesa-subtext: \${isDark ? '#94a3b8' : '#6b7280'};
                   --phesa-accent: #f59e0b;
-                  --phesa-border: \${border};
+                  --phesa-border: \${isDark ? '#334155' : '#e5e7eb'};
                   font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 .phesa-wrapper { background: var(--phesa-bg); padding: 20px; border-radius: 12px; position: relative; overflow: visible; z-index: 9999; }
                 .phesa-avatar-row { display: flex; flex-wrap: nowrap; gap: 6px; justify-content: center; overflow: hidden; }
-                .phesa-avatar-item { width: 46px; height: 46px; border-radius: 50%; overflow: hidden; flex-shrink: 0; cursor: pointer; border: 3px solid transparent; transition: all 0.2s ease; background: \${isDark ? '#1e293b' : '#fff'}; display: flex; align-items: center; justify-content: center; font-weight: bold; color: \${isDark ? '#94a3b8' : '#64748b'}; }
+                .phesa-avatar-item { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; transition: all 0.2s ease; background: \${isDark ? '#1e293b' : '#fff'}; display: flex; align-items: center; justify-content: center; font-weight: bold; color: \${isDark ? '#94a3b8' : '#64748b'}; }
                 .phesa-avatar-item img { width: 100%; height: 100%; object-fit: cover; }
                 .phesa-avatar-item:hover { transform: scale(1.08); }
                 .phesa-avatar-item.phesa-active { border-color: var(--phesa-accent); box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
@@ -808,7 +808,7 @@ const widgetController = {
                   border: 1px solid var(--phesa-border); 
                   border-radius: 12px; 
                   padding: 16px; 
-                  width: 260px;
+                  width: 320px;
                   box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15); 
                   visibility: hidden;
                   opacity: 0;
