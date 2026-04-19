@@ -756,12 +756,12 @@ const widgetController = {
            } else if (type === 'avatar-select') {
               styleText += \`
                 :host {
-                  --phesa-bg: \${bg};
-                  --phesa-card-bg: \${cardBg};
+                  --phesa-bg: \${isDark ? '#0f172a' : '#f5f6f8'};
+                  --phesa-card-bg: \${isDark ? '#1e293b' : '#ffffff'};
                   --phesa-text: \${text};
                   --phesa-subtext: \${isDark ? '#94a3b8' : '#6b7280'};
                   --phesa-accent: #22c55e;
-                  --phesa-border: \${border};
+                  --phesa-border: \${isDark ? '#334155' : '#e5e7eb'};
                   font-family: 'Bricolage Grotesque', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
                 .phesa-wrapper { background: var(--phesa-bg); padding: 24px; border-radius: 12px; }
