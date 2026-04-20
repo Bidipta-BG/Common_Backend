@@ -1315,16 +1315,27 @@ const widgetController = {
               \`;
           } else if (type === 'video-slide') {
               const hasVideo = (t) => t.video_url && t.video_url.trim() !== '';
-              const mediaHtml = (t) => hasVideo(t)
-                ? \`
-                  <video class="phesa-video" preload="metadata" playsinline>
-                    <source src="\${escHtml(t.video_url)}" type="video/mp4">
-                  </video>
-                  <div class="phesa-play-btn" data-action="play"></div>
-                \`
-                : \`
-                  <img src="\${escHtml(t.reviewer_photo_url || t.screenshot_url || 'https://via.placeholder.com/720x360?text=Testimonial')}" />
+              const mediaHtml = (t) => {
+                if (hasVideo(t)) {
+                  return \`
+                    <video class="phesa-video" preload="metadata" playsinline>
+                      <source src="\${escHtml(t.video_url)}" type="video/mp4">
+                    </video>
+                    <div class="phesa-play-btn" data-action="play"></div>
+                  \`;
+                }
+                if (showPhotos) {
+                  return \`<img src="\${escHtml(t.reviewer_photo_url || t.screenshot_url || 'https://via.placeholder.com/720x360?text=Testimonial')}" />\`;
+                }
+                const initial = t.reviewer_name ? escHtml(t.reviewer_name.charAt(0).toUpperCase()) : '?';
+                return \`
+                  <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:\${isDark ? '#1a1a1a' : '#f0f0f0'}; color:\${isDark ? '#999' : '#666'};">
+                    <div style="width:80px; height:80px; border-radius:50%; background:\${isDark ? '#333' : '#ddd'}; display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:bold; margin-bottom:10px;">
+                      \${initial}
+                    </div>
+                  </div>
                 \`;
+              };
 
               return \`
                 <div class="phesa-card">
@@ -1332,6 +1343,7 @@ const widgetController = {
                     \${mediaHtml(t)}
                     <div class="phesa-badge">❤ Testimonial</div>
                     <div class="phesa-overlay">
+                      \${showRatings ? renderStars(t.rating) : ''}
                       <div class="phesa-name">\${escHtml(t.reviewer_name || '')}</div>
                       <div class="phesa-role">
                         \${escHtml(t.reviewer_role || '')}\${t.reviewer_company ? ', ' + escHtml(t.reviewer_company) : ''}
