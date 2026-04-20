@@ -192,7 +192,7 @@ const widgetController = {
       if (!widget) return res.status(404).json({ error: 'Widget not found' });
 
       // Fetch only approved, apply widget max_items
-      const testimonialsQuery = supabase
+      let testimonialsQuery = supabase
         .from('testimonials')
         .select('id, reviewer_name, reviewer_role, reviewer_company, reviewer_photo_url, rating, text_content, video_url, created_at')
         .eq('user_id', widget.user_id)
@@ -210,7 +210,7 @@ const widgetController = {
         if (m === 'all' || m === 200) limit = 200;
         else limit = Number(m) || 10;
       }
-      testimonialsQuery.limit(limit);
+      testimonialsQuery = testimonialsQuery.limit(limit);
 
       const { data: testimonials } = await testimonialsQuery;
 
@@ -246,7 +246,7 @@ const widgetController = {
       }
 
       // 2. Fetch highly vetted Approved Testimonials based on owner
-      const testimonialsQuery = supabase
+      let testimonialsQuery = supabase
         .from('testimonials')
         .select('reviewer_name, reviewer_role, reviewer_company, reviewer_photo_url, rating, text_content, video_url, screenshot_url')
         .eq('user_id', widget.user_id)
@@ -264,7 +264,7 @@ const widgetController = {
         if (m === 'all' || m === 200) limit = 200;
         else limit = Number(m) || 10;
       }
-      testimonialsQuery.limit(limit);
+      testimonialsQuery = testimonialsQuery.limit(limit);
 
       const { data: testimonials } = await testimonialsQuery;
 
