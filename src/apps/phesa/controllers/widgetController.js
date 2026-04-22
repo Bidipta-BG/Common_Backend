@@ -1268,51 +1268,57 @@ const widgetController = {
                </div>
              \`;
           } else if (type === 'split-blocks') {
-              const isEven = (idx || 0) % 2 === 0;
-              const bgClass = isEven ? "phesa-yellow" : "phesa-dynamic";
-              const imageFirst = isEven;
-              const roleText = (t) => [t.reviewer_role, t.reviewer_company].filter(Boolean).join(" at ");
+             return \`
+               <div class="phesa-card">
+                 \${(() => {
+                   const isEven = (idx || 0) % 2 === 0;
+                   const bgClass = isEven ? 'phesa-yellow' : 'phesa-dynamic';
+                   const imageFirst = isEven;
+                   const roleText = [t.reviewer_role, t.reviewer_company].filter(Boolean).join(' at ');
+                   const starColor = isEven ? '#000000' : (isDark ? '#facc15' : '#f59e0b');
+                   const nStars = t.rating || 5;
+                   const starsHtml = showRatings
+                     ? '<div class="phesa-stars" style="color: ' + starColor + '; font-size: 14px; margin-bottom: 16px; letter-spacing: 2px;">'
+                       + '\u2605'.repeat(nStars) + '\u2606'.repeat(5 - nStars)
+                       + '</div>'
+                     : '';
+                   const photoHtml = (showPhotos && t.reviewer_photo_url)
+                     ? '<img src="' + escHtml(t.reviewer_photo_url) + '" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+                     : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f1f5f9;color:#cbd5e1;font-size:50px;font-weight:bold;">'
+                       + escHtml(t.reviewer_name ? t.reviewer_name.charAt(0) : 'P')
+                       + '</div>';
+                   const imageBlock = '<div class="phesa-block phesa-image">' + photoHtml + '</div>';
+                   const textBlock = '<div class="phesa-block phesa-text-block ' + bgClass + '">'
+                     + starsHtml
+                     + '<div class="phesa-quote">&ldquo;' + escHtml(t.text_content || '') + '&rdquo;</div>'
+                     + '<div class="phesa-name">' + escHtml(t.reviewer_name) + '</div>'
+                     + '<div class="phesa-role">' + escHtml(roleText) + '</div>'
+                     + '</div>';
+                   return imageFirst ? imageBlock + textBlock : textBlock + imageBlock;
+                 })()}
+               </div>
+             \`;
 
-              const imageBlock = \`
-                <div class="phesa-block phesa-image">
-                  \${showPhotos && t.reviewer_photo_url ? \`<img src="\${escHtml(t.reviewer_photo_url)}" />\` : '<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#f1f5f9; color:#cbd5e1; font-size:50px; font-weight:bold;">'+escHtml(t.reviewer_name?.charAt(0) || 'P')+'</div>'}
-                </div>
-              \`;
-
-              const textBlock = \`
-                <div class="phesa-block phesa-text-block \${bgClass}">
-                  <div class="phesa-quote">
-                    "\${escHtml(t.text_content || '')}"
-                  </div>
-                  <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
-                  <div class="phesa-role">\${escHtml(roleText(t))}</div>
-                </div>
-              \`;
-
-              return \`
-                <div class="phesa-card">
-                  \${imageFirst ? imageBlock + textBlock : textBlock + imageBlock}
-                </div>
-              \`;
-           } else if (type === 'video-rows') {
-              const roleText = (t) => [t.reviewer_role, t.reviewer_company].filter(Boolean).join(", ");
-              const thumbnailUrl = (t) => t.screenshot_url || t.reviewer_photo_url;
-              return \`
-                <div class="phesa-card">
-                  <div class="phesa-video" \${t.video_url ? 'data-video-url="' + escHtml(t.video_url) + '"' : ''}>
-                    \${thumbnailUrl(t) ? \`<img src="\${escHtml(thumbnailUrl(t))}" />\` : '<div style="width:100%;height:100%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-weight:bold;font-size:32px;">' + escHtml(t.reviewer_name?.charAt(0) || 'P') + '</div>'}
-                    \${t.video_url ? '<div class="phesa-play-btn"></div>' : ''}
-                  </div>
-                  <div class="phesa-content">
-                    <div class="phesa-quote-icon">❝</div>
-                    <div class="phesa-text">\${escHtml(t.text_content || '')}</div>
-                    <div class="phesa-user">
-                      <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
-                      <div class="phesa-role">\${escHtml(roleText(t))}</div>
-                    </div>
-                  </div>
-                </div>
-              \`;
+          } else if (type === 'video-rows') {
+             const roleText = (t) => [t.reviewer_role, t.reviewer_company].filter(Boolean).join(", ");
+             const thumbnailUrl = (t) => t.screenshot_url || (showPhotos ? t.reviewer_photo_url : null);
+             return \`
+               <div class="phesa-card">
+                 <div class="phesa-video" \${t.video_url ? 'data-video-url="' + escHtml(t.video_url) + '"' : ''}>
+                   \${thumbnailUrl(t) ? \`<img src="\${escHtml(thumbnailUrl(t))}" />\` : '<div style="width:100%;height:100%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-weight:bold;font-size:32px;">' + escHtml(t.reviewer_name?.charAt(0) || 'P') + '</div>'}
+                   \${t.video_url ? '<div class="phesa-play-btn"></div>' : ''}
+                 </div>
+                 <div class="phesa-content">
+                   <div class="phesa-quote-icon">❝</div>
+                   \${showRatings ? renderStars(t.rating) : ''}
+                   <div class="phesa-text">\${escHtml(t.text_content || '')}</div>
+                   <div class="phesa-user">
+                     <div class="phesa-name">\${escHtml(t.reviewer_name)}</div>
+                     <div class="phesa-role">\${escHtml(roleText(t))}</div>
+                   </div>
+                 </div>
+               </div>
+             \`;
           } else if (type === 'video-slide') {
               const hasVideo = (t) => t.video_url && t.video_url.trim() !== '';
               const mediaHtml = (t) => {
