@@ -197,12 +197,11 @@ const widgetController = {
       const m = widget.max_items;
 
       if (widget.type === 'avatar-list') {
-        limit = (m === 'all' || m === 200) ? 15 : Math.min(Number(m) || 10, 15);
+        limit = (m === 'all' || parseInt(m) >= 200) ? 15 : Math.min(parseInt(m) || 10, 15);
       } else if (widget.type === 'avatar-select') {
-        limit = (m === 'all' || m === 200) ? 20 : Math.min(Number(m) || 10, 20);
+        limit = (m === 'all' || parseInt(m) >= 200) ? 20 : Math.min(parseInt(m) || 10, 20);
       } else {
-        if (m === 'all' || m === 200) limit = 200;
-        else limit = Number(m) || 10;
+        limit = (m === 'all' || parseInt(m) >= 200) ? 200 : (parseInt(m) || 10);
       }
       testimonialsQuery = testimonialsQuery.limit(limit);
 
@@ -237,27 +236,22 @@ const widgetController = {
         return res.send('console.warn("Phesa Widget: Not found for ID ' + widgetId + '");');
       }
 
-      let testimonialsQuery = supabase
+      let limit = 10;
+      const m = widget.max_items;
+      if (widget.type === 'avatar-list') limit = (m === 'all' || parseInt(m) >= 200) ? 15 : Math.min(parseInt(m) || 10, 15);
+      else if (widget.type === 'avatar-select') limit = (m === 'all' || parseInt(m) >= 200) ? 20 : Math.min(parseInt(m) || 10, 20);
+      else limit = (m === 'all' || parseInt(m) >= 200) ? 200 : (parseInt(m) || 10);
+
+      const { data: testimonials, error: tError } = await supabase
         .from('testimonials')
         .select('reviewer_name, reviewer_role, reviewer_company, reviewer_photo_url, rating, text_content, video_url, screenshot_url')
         .eq('user_id', widget.user_id)
         .eq('status', 'approved')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-      let limit = 10;
-      const m = widget.max_items;
-
-      if (widget.type === 'avatar-list') {
-        limit = (m === 'all' || m === 200) ? 15 : Math.min(Number(m) || 10, 15);
-      } else if (widget.type === 'avatar-select') {
-        limit = (m === 'all' || m === 200) ? 20 : Math.min(Number(m) || 10, 20);
-      } else {
-        if (m === 'all' || m === 200) limit = 200;
-        else limit = Number(m) || 10;
-      }
-      testimonialsQuery = testimonialsQuery.limit(limit);
-
-      const { data: testimonials } = await testimonialsQuery;
+      if (tError) console.error('Phesa Debug: Testimonials Error:', tError);
+      console.log(`Phesa Debug: Widget ${widgetId}, Limit ${limit}, Fetched ${testimonials?.length || 0}`);
 
       const tests = testimonials || [];
       const plan = Array.isArray(widget.profiles) ? widget.profiles[0]?.plan : widget.profiles?.plan;
@@ -289,7 +283,9 @@ const widgetController = {
         '  }',
         '  var shadow = container.attachShadow({ mode: "open" });',
         '  var style = document.createElement("style");',
-        '  var testimonials = ' + T + ';',
+        '  var rawTestimonials = ' + T + ';',
+        '  var limit = ' + limit + ';',
+        '  var testimonials = rawTestimonials.slice(0, limit);',
         '  var showRatings = ' + SHOW_RATINGS + ';',
         '  var showPhotos = ' + SHOW_PHOTOS + ';',
         '  var brandingOn = ' + BRANDING + ';',
