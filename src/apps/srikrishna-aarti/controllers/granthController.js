@@ -57,6 +57,42 @@ exports.getGranthTree = async (req, res, next) => {
 };
 
 /**
+ * GET /api/srikrishna-aarti/granth/:bookId/verses
+ * Returns all verses for a specific book
+ */
+exports.getAllVersesByBookId = async (req, res, next) => {
+    try {
+        const { bookId } = req.params;
+
+        const verses = await Verse.find({ bookId }).sort({ chapterIndex: 1, index: 1 });
+
+        if (!verses || verses.length === 0) {
+            return res.status(404).json({ success: false, message: 'No verses found for this book' });
+        }
+
+        const formattedVerses = verses.map(verse => ({
+            id: verse.verseId,
+            index: verse.index,
+            chapterIndex: verse.chapterIndex,
+            chapter: verse.chapterText,
+            chapterHi: verse.chapterTextHi,
+            sans: verse.sans,
+            en: verse.en,
+            hi: verse.hi,
+            timer: verse.timer
+        }));
+
+        res.status(200).json({
+            bookId,
+            totalVerses: formattedVerses.length,
+            verses: formattedVerses
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
  * GET /api/srikrishna-aarti/granth/verse/:verseId
  * Returns full detail for a verse
  */

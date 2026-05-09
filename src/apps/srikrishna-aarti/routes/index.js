@@ -26,6 +26,7 @@ router.get('/system/version-check', systemController.getVersionCheck);
 // GET endpoints - Granth Study System
 router.get('/granth', granthController.getGranthList);
 router.get('/granth/:bookId', granthController.getGranthTree);
+router.get('/granth/:bookId/verses', granthController.getAllVersesByBookId);
 router.get('/granth/verse/:verseId', granthController.getVerseDetail);
 
 // POST endpoints - Create new data
