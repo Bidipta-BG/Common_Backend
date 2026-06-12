@@ -39,10 +39,14 @@ const formController = {
         show_photo   = true,
         show_logo    = false,
         button_text  = 'Submit Testimonial',
+        business_category
       } = req.body;
 
       if (!title) {
         return res.status(400).json({ error: 'title is required' });
+      }
+      if (!business_category) {
+        return res.status(400).json({ error: 'business_category is required' });
       }
 
       // 1. Get User Profile to evaluate limits
@@ -63,6 +67,22 @@ const formController = {
         return res.status(403).json({
           error: 'style_not_allowed',
           message: `The '${style}' form style requires a higher plan. Please upgrade to use it.`
+        });
+      }
+
+      // 2.5 Check: Does the user already have a form with this style?
+      const { data: existingForm, error: existingFormError } = await supabase
+        .from('collection_forms')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('style', style)
+        .limit(1)
+        .single();
+
+      if (existingForm) {
+        return res.status(409).json({
+          error: 'template_already_in_use',
+          message: 'You already have a form using this template. Please delete it first to create a new one.'
         });
       }
 
@@ -97,9 +117,9 @@ const formController = {
         show_email:   !!show_email,
         show_role:    !!show_role,
         show_company: !!show_company,
-        show_photo:   !!show_photo,
         show_logo:    !!show_logo,
         button_text,
+        business_category,
       };
 
       const { data: createdForm, error: insertError } = await supabase
@@ -180,6 +200,7 @@ const formController = {
 
       const publicForm = {
         id:                form.id,
+        user_id:           form.user_id,
         title:             form.title,
         welcome_message:   form.welcome_message,
         thank_you_message: form.thank_you_message,
@@ -194,6 +215,7 @@ const formController = {
         show_logo:         form.show_logo     ?? false,
         button_text:       form.button_text   || 'Submit Testimonial',
         business_logo_url: profile?.business_logo_url || null,
+        qr_tagline:        form.qr_tagline    || null,
       };
 
       res.status(200).json({ form: publicForm });
@@ -213,6 +235,7 @@ const formController = {
         title, welcome_message, thank_you_message,
         collect_video, is_active, style,
         show_email, show_role, show_company, show_photo, show_logo, button_text,
+        business_category
       } = req.body;
 
       // Check ownership
@@ -263,6 +286,8 @@ const formController = {
       if (show_photo !== undefined)        updates.show_photo   = !!show_photo;
       if (show_logo !== undefined)         updates.show_logo    = !!show_logo;
       if (button_text !== undefined)       updates.button_text  = button_text;
+      if (business_category !== undefined) updates.business_category = business_category;
+      if (req.body.qr_tagline !== undefined) updates.qr_tagline   = req.body.qr_tagline;
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: 'No valid fields provided to update.' });

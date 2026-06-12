@@ -65,6 +65,23 @@ const widgetController = {
         return res.status(403).json({ error: 'plan_limit_reached' });
       }
 
+      // 2.5 Check: Does the user already have a widget with this type and theme?
+      const { data: existingWidget } = await supabase
+        .from('widgets')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('type', type || 'wall')
+        .eq('theme', theme || 'light')
+        .limit(1)
+        .single();
+
+      if (existingWidget) {
+        return res.status(409).json({
+          error: 'template_already_in_use',
+          message: 'You already have a widget using this template and theme. Please edit or delete it to create a new one.'
+        });
+      }
+
       const { data, error } = await supabase
         .from('widgets')
         .insert({

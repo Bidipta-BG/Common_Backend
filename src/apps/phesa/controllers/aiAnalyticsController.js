@@ -47,20 +47,23 @@ const aiAnalyticsController = {
       const google_connected = !!gbp;
 
       // 3. Count Testimonials (Calculate both total and approved)
-      const { data: testimonials } = await supabase
-        .from('testimonials')
-        .select('source, screenshot_url, status')
-        .eq('user_id', userId);
+      const [ { data: testimonials }, { data: platformReviews } ] = await Promise.all([
+        supabase.from('testimonials').select('source, screenshot_url').eq('user_id', userId),
+        supabase.from('platform_reviews').select('platform').eq('user_id', userId)
+      ]);
 
-      const approvedCount = testimonials.filter(t => t.status === 'approved').length;
+      const testData = testimonials || [];
+      const platData = platformReviews || [];
+
+      const totalCount = testData.length + platData.length;
+      const googleCount = testData.filter(t => t.source === 'google').length + platData.filter(p => p.platform === 'google').length;
 
       const counts = {
-        total: testimonials.length,
-        approved_total: approvedCount,
-        google_reviews: testimonials.filter(t => t.source === 'google').length,
-        form_testimonials: testimonials.filter(t => t.source === 'form').length,
-        manual_count: testimonials.filter(t => t.source === 'manual').length,
-        screenshots_count: testimonials.filter(t => t.screenshot_url).length
+        total: totalCount,
+        google_reviews: googleCount,
+        form_testimonials: testData.filter(t => t.source === 'form').length,
+        manual_count: testData.filter(t => t.source === 'manual').length,
+        screenshots_count: testData.filter(t => t.screenshot_url).length
       };
 
       // 4. Plan Limits
@@ -76,7 +79,7 @@ const aiAnalyticsController = {
       if (calls_remaining === 0) {
         can_run = false;
         reason = 'limit_reached';
-      } else if (counts.total < 10) {
+      } else if (counts.total < 50) {
         can_run = false;
         reason = 'no_data';
       }
@@ -126,91 +129,212 @@ const aiAnalyticsController = {
       }
 
       // 2. Fetch Aggregated Data (Status agnostic for balanced analysis)
-      const { data: testimonials } = await supabase
-        .from('testimonials')
-        .select('*')
-        .eq('user_id', userId);
+      const [ { data: testimonialsData }, { data: platformReviewsData } ] = await Promise.all([
+        supabase.from('testimonials').select('*').eq('user_id', userId),
+        supabase.from('platform_reviews').select('*').eq('user_id', userId)
+      ]);
 
-      if (testimonials.length < 10) {
+      const testimonials = testimonialsData || [];
+      const platformReviews = platformReviewsData || [];
+
+      if (testimonials.length + platformReviews.length < 50) {
         return res.status(403).json({ error: 'no_data' });
       }
 
-      // 3. Format Context for Claude
-      const businessName = profile.business_name || 'Our Premium Business';
-      const formattedReviews = testimonials.map(t =>
-        `[${t.source}] ${t.reviewer_name} (${t.reviewer_role || 'Customer'}): ${t.rating}/5 - ${t.text_content}`
-      ).join('\n');
+      // Unify data
+      let allReviews = [
+        ...testimonials.map(t => ({
+          type: 'testimonial',
+          source: t.source,
+          reviewer_name: t.reviewer_name,
+          reviewer_role: t.reviewer_role,
+          reviewer_company: t.reviewer_company,
+          rating: t.rating,
+          text_content: t.text_content,
+          created_at: t.created_at
+        })),
+        ...platformReviews.map(p => ({
+          type: 'platform',
+          source: p.platform,
+          reviewer_name: p.reviewer_name,
+          reviewer_role: null,
+          reviewer_company: null,
+          rating: p.rating,
+          text_content: p.review_text,
+          created_at: p.review_date || p.created_at || new Date()
+        }))
+      ];
 
-      const screenshotUrls = (plan !== 'free')
-        ? testimonials.filter(t => t.screenshot_url).map(t => t.screenshot_url)
-        : [];
+      // Sort by newest
+      allReviews.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-      const basePrompt = `You are a business analyst helping an Indian small business owner understand their customer feedback. Business: ${businessName}.
-Total reviews: ${testimonials.length} (${testimonials.filter(t => t.source === 'google').length} Google, ${testimonials.filter(t => t.source === 'form').length} form submissions, ${testimonials.filter(t => t.source === 'manual').length} manual entries).
-
-Reviews data:
-${formattedReviews}
-
-IMPORTANT: You MUST produce ALL of the following sections in the EXACT order listed below. Use the EXACT header text shown. Do NOT skip, merge, or rename any section. Each section header must start with '## '.
-
-## Overall Sentiment
-(Write 2-3 sentences summarising the average rating and overall tone)
-
-## What Customers Love
-(List exactly 3 bullet points using '- ' prefix)
-
-## Areas to Improve
-(List exactly 3 bullet points using '- ' prefix)
-
-## Action Recommendations
-(List exactly 3 numbered action items)
-
-Be encouraging, specific, and write in simple English suitable for an Indian small business owner.`;
-
-      const deepPromptAddon = `
-
-For this Pro Deep Analysis, you MUST ALSO include ALL four of these additional sections below, in this EXACT order, with these EXACT headers:
-
-## Sentiment by Source
-(Create a table or bullet list comparing Google vs Form vs Manual reviews. If a source has 0 reviews, explicitly say so and explain the opportunity.)
-
-## Customer Persona
-(Describe 3-4 distinct customer personas based on the reviewer roles and feedback patterns. Use a table or structured bullets.)
-
-## Priority Action Plan
-(List EXACTLY 4 to 6 priority action items, ordered from highest to lowest business impact. Use numbered list format: 1. 2. 3. etc. THIS SECTION IS MANDATORY — do not skip it or merge it with Action Recommendations.)
-
-## Follow-up Suggestions
-(Name 3-5 specific customers from the reviews who should be approached for video testimonials, and explain why.)`;
-
-      const finalPrompt = plan === 'pro' ? (basePrompt + deepPromptAddon) : basePrompt;
-
-      // 5. Call Anthropic
-      let apiResponse;
-      if (plan === 'pro' && screenshotUrls.length > 0) {
-        apiResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 2500,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: finalPrompt },
-              ...screenshotUrls.slice(0, 20).map(url => ({ // Limitation on number of images
-                type: 'image',
-                source: { type: 'url', url: url }
-              }))
-            ]
-          }]
-        });
+      // Apply limits — capped to prevent oversized API payloads
+      if (plan === 'free') {
+        allReviews = allReviews.slice(0, 50);
+      } else if (plan === 'starter') {
+        allReviews = allReviews.slice(0, 300);
       } else {
-        apiResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1500,
-          messages: [{ role: 'user', content: finalPrompt }]
-        });
+        // pro — top 500 most recent reviews
+        allReviews = allReviews.slice(0, 500);
       }
 
+      const totalCount = allReviews.length;
+      const googleCount = allReviews.filter(r => r.source === 'google').length;
+      const formCount = allReviews.filter(r => r.source === 'form').length;
+      const manualCount = allReviews.filter(r => r.source === 'manual').length;
+
+      // 3. Format Context for Claude
+      const businessName = profile.business_name || 'Our Premium Business';
+      const businessCategory = ''; 
+      
+      function formatReviews(reviews) {
+        return reviews.map((t, i) => {
+          const source = t.source === 'google' ? 'Google Review' 
+                       : t.source === 'form'   ? 'Feedback Form' 
+                       : t.source === 'manual' ? 'Manual Entry'
+                       : (t.source && typeof t.source === 'string' ? t.source.charAt(0).toUpperCase() + t.source.slice(1) + ' Review' : 'Unknown Source');
+          const role = t.reviewer_role ? ` · ${t.reviewer_role}` : '';
+          const company = t.reviewer_company ? ` at ${t.reviewer_company}` : '';
+          const date = t.created_at 
+            ? new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+            : '';
+          
+          return `[${i + 1}] ${t.reviewer_name || 'Customer'}${role}${company} | ${t.rating}/5 stars | ${source} | ${date}\n"${(t.text_content || 'No written review provided').slice(0, 300)}"`;
+        }).join('\n\n');
+      }
+
+      const formattedReviews = formatReviews(allReviews);
+
+      // Build Prompt
+      let systemPrompt = '';
+      let userPrompt = '';
+
+      if (plan === 'pro' || plan === 'starter') {
+        const priorityCount = totalCount >= 20 ? 5 : 4;
+        systemPrompt = `You are a senior business analyst specialising in Indian small businesses. Your job is to read customer feedback and produce a comprehensive, data-driven analysis that helps a business owner understand their market position and take strategic action.
+
+Writing style rules:
+- Write as if presenting to an intelligent Indian entrepreneur who wants real insights, not flattery
+- Be specific — reference actual reviewer names, quotes, and patterns from the data
+- Be honest — if something is genuinely bad, say so clearly
+- Use tables where comparison is needed (use markdown table format)
+- CRITICAL: You MUST complete ALL 7 sections. Never leave the last section incomplete. If you are running long in early sections, trim them — do NOT sacrifice the final sections.
+- CRITICAL: Strict word budget per section — follow exactly:
+  • Overall Sentiment: 80-100 words
+  • What Customers Love: 150-200 words (3 bullets, ~50-65 words each)
+  • Areas to Improve: 150-200 words (3 bullets, ~50-65 words each)
+  • Action Recommendations: 200-250 words (3 items, ~65-80 words each)
+  • Sentiment by Source: 150-180 words
+  • Customer Persona: 350-400 words (2-3 personas, ~120-130 words each)
+  • Priority Action Plan: 400-500 words (${priorityCount} items, ~80-100 words each)
+- Total response must not exceed 2,200 words.`;
+
+        userPrompt = `Analyse the customer feedback below for this business and produce a comprehensive deep analysis report.
+
+BUSINESS DETAILS:
+Name: ${businessName}
+Category: ${businessCategory || "Small business"}
+Total reviews analysed: ${totalCount}
+Breakdown: ${googleCount} Google · ${formCount} Collection Form · ${manualCount} Manual
+
+CUSTOMER FEEDBACK:
+${formattedReviews}
+
+---
+
+Produce your analysis in EXACTLY this structure. Use these exact section headers with ## prefix. Do not skip any section. Do not add any extra sections.
+
+## Overall Sentiment
+Start with exactly this format: SCORE: X/100 (where X is the calculated overall sentiment score out of 100).
+Then write 2-3 sentences covering: average rating, dominant emotional tone, and the single most important takeaway from this feedback.
+
+## What Customers Love
+Exactly 3 bullet points starting with -
+Each point names one specific strength with a supporting quote or reference from the actual reviews above.
+
+## Areas to Improve
+Exactly 3 bullet points starting with -
+Each point names one specific problem. Reference how many reviewers mentioned it if more than one.
+
+## Action Recommendations
+Exactly 3 numbered items (1. 2. 3.)
+Each: one concrete action the owner can take this week. Specific, not generic. Max 1-2 sentences each.
+
+## Sentiment by Source
+Compare feedback quality across sources using this structure:
+- Google Reviews (${googleCount} reviews): [summary + avg rating if calculable]
+- Collection Form (${formCount} reviews): [summary + tone]
+- Manual Entries (${manualCount} reviews): [summary + tone]
+If any source has 0 reviews, note it in one sentence only.
+
+## Customer Persona
+Identify 2-3 distinct customer types. For each: who they are + what they care about + how to win more of them. Max 2 sentences per persona.
+
+## Priority Action Plan
+Exactly ${priorityCount} numbered actions ordered by business impact. Each item: action + why it matters + one first step. Max 2 sentences each.
+
+## Priority Action Plan ends here.
+Do not add any other sections beyond what is listed above.`;
+
+      } else {
+        systemPrompt = `You are a friendly and insightful business analyst specialising in Indian small businesses. Your job is to read customer feedback and produce a clear, actionable analysis report.
+
+Writing style rules:
+- Write as if speaking to a first-generation Indian entrepreneur
+- Use simple, direct English — no jargon, no corporate language
+- Be honest but encouraging
+- CRITICAL: You MUST complete ALL 4 sections. Never leave the last section incomplete.
+- CRITICAL: Strict word budget — follow exactly:
+  • Overall Sentiment: 50-70 words
+  • What Customers Love: 150-180 words (3 bullets, ~50-60 words each)
+  • Areas to Improve: 150-180 words (3 bullets, ~50-60 words each)
+  • Action Recommendations: 200-250 words (3 items, ~65-80 words each)
+- Total response must not exceed 850 words.`;
+
+        userPrompt = `Analyse the customer feedback below for this business and produce a structured report.
+
+BUSINESS DETAILS:
+Name: ${businessName}
+Category: ${businessCategory || "Small business"}
+Total reviews analysed: ${totalCount} (${googleCount} from Google, ${formCount} from collection form, ${manualCount} manual entries)
+
+CUSTOMER FEEDBACK:
+${formattedReviews}
+
+---
+
+Produce your analysis in EXACTLY this structure. Use these exact section headers with ## prefix:
+
+## Overall Sentiment
+Start with exactly this format: SCORE: X/100 (where X is the calculated overall sentiment score out of 100).
+Then write 2-3 sentences. State the average rating, the general mood of customers, and one key standout observation.
+
+## What Customers Love
+Exactly 3 bullet points starting with - 
+Each point: one specific thing customers praised. Quote a real phrase from the reviews if possible.
+
+## Areas to Improve
+Exactly 3 bullet points starting with -
+Each point: one specific complaint or gap. Be direct — do not sugarcoat.
+
+## Action Recommendations
+Exactly 3 numbered items (1. 2. 3.)
+Each item: one concrete action the owner can take THIS WEEK. Be specific, not generic.`;
+      }
+
+      // 5. Call Anthropic SDK
+      const combinedPrompt = systemPrompt + "\n\n" + userPrompt;
+      const apiResponse = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: (plan === 'pro' || plan === 'starter') ? 4000 : 1500,
+        messages: [{ role: 'user', content: combinedPrompt }]
+      });
+
       const analysisText = apiResponse.content[0].text;
+
+      // Log token usage for monitoring
+      const usage = apiResponse.usage;
+      console.log(`[AI Analysis] Plan: ${plan} | Reviews sent: ${totalCount} | Tokens — Input: ${usage.input_tokens}, Output: ${usage.output_tokens}, Total: ${usage.input_tokens + usage.output_tokens}`);
 
       // 6. Save results to DB
       const { data: analysisRecord, error: saveError } = await supabase
@@ -218,13 +342,13 @@ For this Pro Deep Analysis, you MUST ALSO include ALL four of these additional s
         .insert({
           user_id: userId,
           analysis_text: analysisText,
-          analysis_type: plan === 'pro' ? 'deep' : 'standard',
-          google_reviews_count: testimonials.filter(t => t.source === 'google').length,
-          form_testimonials_count: testimonials.filter(t => t.source === 'form').length,
-          manual_count: testimonials.filter(t => t.source === 'manual').length,
-          screenshots_count: screenshotUrls.length,
-          screenshots_included: (plan !== 'free' && screenshotUrls.length > 0),
-          total_data_points: testimonials.length,
+          analysis_type: (plan === 'pro' || plan === 'starter') ? 'deep' : 'standard',
+          google_reviews_count: googleCount,
+          form_testimonials_count: formCount,
+          manual_count: manualCount,
+          screenshots_count: 0,
+          screenshots_included: false,
+          total_data_points: totalCount,
           last_included_at: now.toISOString()
         })
         .select()
@@ -262,7 +386,7 @@ For this Pro Deep Analysis, you MUST ALSO include ALL four of these additional s
       });
     } catch (error) {
       console.error('Error in runAnalysis AI:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: error.message || 'Internal server error', stack: error.stack });
     }
   },
 

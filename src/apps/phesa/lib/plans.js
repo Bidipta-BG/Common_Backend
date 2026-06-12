@@ -4,10 +4,10 @@
 // ─────────────────────────────────────────────────────────
 const STYLE_PLAN_MAP = {
   classic:      'free',
-  social:       'free',
+  social:       'starter',
   video_first:  'starter',
   quick_rating: 'starter',
-  brand_story:  'starter',
+  brand_story:  'pro',
   luxury:       'pro',
 };
 
@@ -33,7 +33,7 @@ const PLANS = {
     price: 499, // INR
     limits: {
       testimonials: 50,
-      forms: 5,
+      forms: 4,
       widgets: 3,
       video: false,
       screenshot: true,
