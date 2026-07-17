@@ -5,11 +5,11 @@ exports.createLead = async (req, res) => {
     try {
         const { formType, leadInfo } = req.body;
 
-        // Basic validation
-        if (!formType || !leadInfo || !leadInfo.name || !leadInfo.email || !leadInfo.phone) {
+        // Basic validation — email is optional (user may not provide it)
+        if (!formType || !leadInfo || !leadInfo.name || !leadInfo.phone) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing required fields: formType, name, email, or phone'
+                message: 'Missing required fields: formType, name, or phone'
             });
         }
 
@@ -85,6 +85,62 @@ exports.updateLead = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Server error while updating lead',
+            error: error.message
+        });
+    }
+};
+
+// Get a single lead by ID
+exports.getLeadById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const lead = await Lead.findById(id);
+        
+        if (!lead) {
+            return res.status(404).json({ success: false, message: 'Lead not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: lead
+        });
+    } catch (error) {
+        console.error('Error fetching lead by ID:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while fetching lead',
+            error: error.message
+        });
+    }
+};
+
+// Full replacement of lead data (used for sales edit mode)
+exports.replaceLead = async (req, res) => {
+    try {
+        const { id } = req.params;
+        // Don't overwrite followup status accidentally if not sent
+        const updateData = req.body;
+
+        const updatedLead = await Lead.findByIdAndUpdate(
+            id,
+            updateData,
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedLead) {
+            return res.status(404).json({ success: false, message: 'Lead not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Lead completely updated',
+            data: updatedLead
+        });
+    } catch (error) {
+        console.error('Error replacing lead:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while replacing lead',
             error: error.message
         });
     }

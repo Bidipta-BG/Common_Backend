@@ -2,8 +2,11 @@ const mongoose = require('mongoose');
 
 const LeadInfoSchema = new mongoose.Schema({
     name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true }
+    email: { type: String },
+    phone: { type: String, required: true },
+    businessName: { type: String },
+    city: { type: String },
+    preferredCallTime: { type: String }
 }, { _id: false });
 
 const SelectionSchema = new mongoose.Schema({
@@ -28,12 +31,33 @@ const QuotationSchema = new mongoose.Schema({
 
 const LeadSchema = new mongoose.Schema({
     formType: { type: String, required: true },
+    industry: { type: String },
+    buildType: { type: String, enum: ['website', 'app', 'both'] },
+    managementType: { type: String, enum: ['managed', 'handover'] },
     leadInfo: { type: LeadInfoSchema, required: true },
+    answers: { type: mongoose.Schema.Types.Mixed },
+    readableAnswers: [{
+        question: { type: String },
+        answer: { type: String }
+    }],
+    recommendation: {
+        package: { type: String },
+        complexityScore: { type: Number },
+        paymentPlan: { type: String },
+        pricing: { type: mongoose.Schema.Types.Mixed },
+        features: [{ type: String }],
+        reasons: [{ type: String }]
+    },
+    refundPolicy: {
+        deliveryWindowDays: { type: Number },
+        refundDeadlineDays: { type: Number },
+        refundEligible: { type: Boolean, default: true }
+    },
     selection: { type: SelectionSchema },
     quotation: { type: QuotationSchema },
     followupStatus: {
         type: String,
-        enum: ['Pending', 'Contacted', 'Not Interested', 'Converted'],
+        enum: ['Pending', 'Contacted', 'In Progress', 'Not Interested', 'Lost', 'Converted'],
         default: 'Pending'
     },
     followupDate: { type: Date },
