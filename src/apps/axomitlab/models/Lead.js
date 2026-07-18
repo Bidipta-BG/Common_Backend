@@ -36,6 +36,7 @@ const LeadSchema = new mongoose.Schema({
     managementType: { type: String, enum: ['managed', 'handover'] },
     leadInfo: { type: LeadInfoSchema, required: true },
     answers: { type: mongoose.Schema.Types.Mixed },
+    salesAnswers: { type: mongoose.Schema.Types.Mixed },
     readableAnswers: [{
         question: { type: String },
         answer: { type: String }
