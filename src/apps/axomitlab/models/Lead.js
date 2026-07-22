@@ -30,6 +30,7 @@ const QuotationSchema = new mongoose.Schema({
 }, { _id: false });
 
 const LeadSchema = new mongoose.Schema({
+    leadId: { type: String, unique: true },
     formType: { type: String, required: true },
     industry: { type: String },
     buildType: { type: String, enum: ['website', 'app', 'both'] },

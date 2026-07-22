@@ -1,4 +1,5 @@
 const Lead = require('../models/Lead');
+const Counter = require('../models/Counter');
 
 // Create a new lead
 exports.createLead = async (req, res) => {
@@ -13,7 +14,18 @@ exports.createLead = async (req, res) => {
             });
         }
 
-        const newLead = new Lead(req.body);
+        // Generate Lead ID
+        const counter = await Counter.findOneAndUpdate(
+            { _id: 'leadId' },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+        );
+        const seqNumber = counter.seq;
+        const paddedSeq = String(seqNumber).padStart(5, '0');
+        const generatedLeadId = `AX${paddedSeq}`;
+
+        const leadData = { ...req.body, leadId: generatedLeadId };
+        const newLead = new Lead(leadData);
         const savedLead = await newLead.save();
 
         res.status(201).json({
