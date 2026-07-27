@@ -34,7 +34,8 @@ const importController = {
         name: place.name,
         address: place.formatted_address,
         rating: place.rating,
-        total_ratings: place.user_ratings_total
+        total_ratings: place.user_ratings_total,
+        types: place.types
       }));
 
       res.status(200).json({ results });

@@ -1,6 +1,89 @@
 const supabase = require('../lib/supabase');
+const { getUnifiedReviewCount } = require('../lib/reviewCount');
 
 const analyticsController = {
+  getDashboardIntelligence: async (req, res) => {
+    try {
+      const userId = req.userId;
+
+      // 1. Get unified review count
+      const { total } = await getUnifiedReviewCount(userId, supabase);
+
+      // 2. Fetch user's plan
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('plan')
+        .eq('id', userId)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError;
+      }
+      
+      const plan = profile?.plan || 'free';
+      const required = 100;
+      const percent = Math.min(100, Math.round((total / required) * 100));
+      const review_progress = { collected: total, required, percent };
+
+      // 3. Check if unlocked
+      if (total < required) {
+        return res.status(200).json({
+          intelligence_unlocked: false,
+          review_progress,
+          plan
+        });
+      }
+
+      // 4. If unlocked, fetch latest analysis
+      const { data: analysis, error: analysisError } = await supabase
+        .from('ai_analyses')
+        .select('analysis_text, created_at, reputation_score, top_strengths, top_complaints, top_priorities')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (analysisError) {
+        throw analysisError;
+      }
+
+      let reputation_score = null;
+      let top_strength = null;
+      let top_complaint = null;
+      let top_priority = null;
+
+      if (analysis) {
+        if (analysis.reputation_score !== undefined && analysis.reputation_score !== null) {
+          reputation_score = analysis.reputation_score;
+          top_strength = (analysis.top_strengths && analysis.top_strengths.length > 0) ? analysis.top_strengths[0] : null;
+          top_complaint = (analysis.top_complaints && analysis.top_complaints.length > 0) ? analysis.top_complaints[0] : null;
+          top_priority = (analysis.top_priorities && analysis.top_priorities.length > 0) ? analysis.top_priorities[0] : null;
+        } else if (analysis.analysis_text) {
+          // Fallback for old records
+          const match = analysis.analysis_text.match(/SCORE:\s*(\d+)\/100/);
+          if (match && match[1]) {
+            reputation_score = parseInt(match[1], 10);
+          }
+        }
+      }
+
+      return res.status(200).json({
+        intelligence_unlocked: true,
+        review_progress,
+        plan,
+        reputation_score,
+        top_complaint,
+        top_strength,
+        top_priority,
+        last_analysis_at: analysis ? analysis.created_at : null
+      });
+
+    } catch (error) {
+      console.error('Error in getDashboardIntelligence:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
   getDashboardStats: async (req, res) => {
     try {
       const userId = req.userId;
@@ -155,6 +238,8 @@ const analyticsController = {
       const conversionRate = currentConvRaw.toFixed(1) + '%';
       const conversionTrend = (convDiff > 0 ? '+' : '') + convDiff.toFixed(1) + '%';
 
+      const { total } = await getUnifiedReviewCount(userId, supabase);
+
       res.status(200).json({
         total_testimonials: totalTestimonials || 0,
         total_trend: calcPct(totalTestimonials, totalTestimonials - totalNewThisMonth),
@@ -179,7 +264,14 @@ const analyticsController = {
         form_views_trend: calcPct(thisMonthFormViews, lastMonthFormViews),
         
         conversion_rate: conversionRate,
-        conversion_trend: conversionTrend
+        conversion_trend: conversionTrend,
+
+        review_progress: {
+          collected: total,
+          required: 100,
+          percent: Math.min(100, Math.round((total / 100) * 100))
+        },
+        intelligence_unlocked: total >= 100
       });
     } catch (error) {
       console.error('Error in getDashboardStats:', error);

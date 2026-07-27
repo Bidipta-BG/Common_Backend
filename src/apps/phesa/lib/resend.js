@@ -36,7 +36,11 @@ const sendEmail = async (to, subject, html) => {
     });
 
     if (error) {
-      console.error('Resend Error:', error);
+      if (error.statusCode === 401 || error.message?.includes('invalid')) {
+        console.warn('[DEV Notice] Resend API key is invalid or expired. Email notifications are skipped in local development.');
+      } else {
+        console.error('Resend Error:', error);
+      }
       return { success: false, error };
     }
 
@@ -76,8 +80,24 @@ const sendWelcomeEmail = async (userEmail, userName) => {
   return sendEmail(userEmail, subject, wrapHtmlWithBrand(content));
 };
 
+const sendVerificationOtpEmail = async (email, businessName, otp) => {
+  const htmlContent = `
+<div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
+  <h2 style="color: #111827;">Business Verification</h2>
+  <p style="color: #374151;">Your verification code for <strong>${businessName}</strong> is:</p>
+  <div style="font-size: 40px; font-weight: bold; letter-spacing: 12px; color: #4f46e5; padding: 20px 0;">${otp}</div>
+  <p style="color: #374151;">This code expires in <strong>5 minutes</strong>. Do not share it with anyone.</p>
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+  <p style="color: #9ca3af; font-size: 12px;">If you did not request this code, please ignore this email.</p>
+</div>
+  `;
+
+  return sendEmail(email, `Your 5StarRating verification code: ${otp}`, htmlContent);
+};
+
 module.exports = {
   sendEmail,
   sendNewTestimonialEmail,
-  sendWelcomeEmail
+  sendWelcomeEmail,
+  sendVerificationOtpEmail
 };

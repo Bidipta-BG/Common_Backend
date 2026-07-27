@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const supabase = require('../lib/supabase');
+const { isBusinessVerified } = require('../lib/verificationCheck');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -11,6 +12,11 @@ const aiAnalyticsController = {
   checkEligibility: async (req, res) => {
     try {
       const userId = req.userId;
+
+      const verified = await isBusinessVerified(userId, supabase);
+      if (!verified) {
+        return res.status(403).json({ error: 'business_not_verified', message: 'Please verify your business to run AI analysis.', verification_required: true });
+      }
 
       // 1. Get user profile and handle monthly reset
       const { data: profile, error: profileError } = await supabase
@@ -67,7 +73,7 @@ const aiAnalyticsController = {
       };
 
       // 4. Plan Limits
-      const plan = profile.plan || 'free';
+      const plan = (profile.plan || 'free').toLowerCase();
       const limit = plan === 'pro' ? 3 : 1;
       let calls_used = (plan === 'free') ? (profile.ai_analyses_used_lifetime || 0) : current_month_used;
       let calls_remaining = Math.max(0, limit - calls_used);
@@ -79,12 +85,21 @@ const aiAnalyticsController = {
       if (calls_remaining === 0) {
         can_run = false;
         reason = 'limit_reached';
-      } else if (counts.total < 50) {
+      } else if (counts.total < 100) {
         can_run = false;
         reason = 'no_data';
       }
 
       const firstOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+      // Fetch claimed business
+      const { data: claimedBusiness } = await supabase
+        .from('claimed_businesses')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const has_claimed_business = !!claimedBusiness;
 
       res.status(200).json({
         can_run,
@@ -93,7 +108,8 @@ const aiAnalyticsController = {
         calls_remaining,
         resets_at: (plan === 'free') ? null : firstOfNextMonth.toISOString(),
         screenshots_will_be_included: (plan !== 'free' && counts.screenshots_count > 0),
-        data_points: counts
+        data_points: counts,
+        has_claimed_business
       });
     } catch (error) {
       console.error('Error in checkEligibility AI:', error);
@@ -109,10 +125,15 @@ const aiAnalyticsController = {
     try {
       const userId = req.userId;
 
+      const verified = await isBusinessVerified(userId, supabase);
+      if (!verified) {
+        return res.status(403).json({ error: 'business_not_verified', message: 'Please verify your business to run AI analysis.', verification_required: true });
+      }
+
       // 1. Internal Eligibility Re-Verification
       // (For brevity, re-running minimal version or using req.eligibility if possible)
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      const plan = profile?.plan || 'free';
+      const plan = (profile?.plan || 'free').toLowerCase();
       const now = new Date();
 
       // (Basic sanity check before calling API)
@@ -137,7 +158,7 @@ const aiAnalyticsController = {
       const testimonials = testimonialsData || [];
       const platformReviews = platformReviewsData || [];
 
-      if (testimonials.length + platformReviews.length < 50) {
+      if (testimonials.length + platformReviews.length < 100) {
         return res.status(403).json({ error: 'no_data' });
       }
 
@@ -165,18 +186,68 @@ const aiAnalyticsController = {
         }))
       ];
 
-      // Sort by newest
-      allReviews.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      // --- CASCADE SAMPLING ENGINE ---
+      const planLimits = require('../lib/plans').getPlanLimits(plan);
+      const aiLimit = planLimits.ai_analysis_reviews_limit || 100;
 
-      // Apply limits — capped to prevent oversized API payloads
-      if (plan === 'free') {
-        allReviews = allReviews.slice(0, 50);
-      } else if (plan === 'starter') {
-        allReviews = allReviews.slice(0, 300);
-      } else {
-        // pro — top 500 most recent reviews
-        allReviews = allReviews.slice(0, 500);
+      const reviewsByRating = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+      allReviews.forEach(r => {
+        let rating = Math.round(Number(r.rating));
+        if (isNaN(rating) || rating < 1) rating = 5;
+        if (rating > 5) rating = 5;
+        reviewsByRating[rating].push(r);
+      });
+
+      // Sort each bucket by newest first
+      Object.keys(reviewsByRating).forEach(star => {
+        reviewsByRating[star].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      });
+
+      let finalSample = [];
+      let currentTarget = Math.floor(aiLimit / 5);
+
+      // Pass 1: Cascade deficit from 1 to 5
+      for (let star = 1; star <= 5; star++) {
+        const bucket = reviewsByRating[star];
+        if (bucket.length >= currentTarget) {
+          finalSample.push(...bucket.slice(0, currentTarget));
+          currentTarget = Math.floor(aiLimit / 5); // reset target for next star
+        } else {
+          finalSample.push(...bucket);
+          const deficit = currentTarget - bucket.length;
+          currentTarget = Math.floor(aiLimit / 5) + deficit; // carry over deficit to next star
+        }
       }
+
+      // Pass 2: Fill remaining slots if there was a deficit at the very end (at 5-stars)
+      const targetTotal = Math.min(allReviews.length, aiLimit);
+      if (finalSample.length < targetTotal) {
+        const remainingNeeded = targetTotal - finalSample.length;
+        let added = 0;
+        const alreadyAdded = new Set(finalSample);
+
+        // Prioritize extremes first for the fill
+        const fillOrder = [5, 1, 4, 2, 3];
+        for (const star of fillOrder) {
+          for (const r of reviewsByRating[star]) {
+            if (!alreadyAdded.has(r)) {
+              finalSample.push(r);
+              alreadyAdded.add(r);
+              added++;
+              if (added >= remainingNeeded) break;
+            }
+          }
+          if (added >= remainingNeeded) break;
+        }
+      }
+
+      // Shuffle final sample to prevent Claude from bias (seeing all 1-stars grouped together)
+      for (let i = finalSample.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [finalSample[i], finalSample[j]] = [finalSample[j], finalSample[i]];
+      }
+
+      allReviews = finalSample;
 
       const totalCount = allReviews.length;
       const googleCount = allReviews.filter(r => r.source === 'google').length;
@@ -185,7 +256,14 @@ const aiAnalyticsController = {
 
       // 3. Format Context for Claude
       const businessName = profile.business_name || 'Our Premium Business';
-      const businessCategory = ''; 
+      
+      const { data: cb } = await supabase
+        .from('claimed_businesses')
+        .select('business_category')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const businessCategory = cb?.business_category || profile.business_name || ''; 
       
       function formatReviews(reviews) {
         return reviews.map((t, i) => {
@@ -325,7 +403,7 @@ Each item: one concrete action the owner can take THIS WEEK. Be specific, not ge
       // 5. Call Anthropic SDK
       const combinedPrompt = systemPrompt + "\n\n" + userPrompt;
       const apiResponse = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: (plan === 'pro' || plan === 'starter') ? 4000 : 1500,
         messages: [{ role: 'user', content: combinedPrompt }]
       });
@@ -355,6 +433,52 @@ Each item: one concrete action the owner can take THIS WEEK. Be specific, not ge
         .single();
 
       if (saveError) throw saveError;
+
+      // Parse structured data and update DB
+      let reputation_score = 85; // Default fallback score if regex match fails
+      const scoreMatch = analysisText.match(/SCORE:\s*(\d+)/i);
+      if (scoreMatch && scoreMatch[1]) {
+        reputation_score = parseInt(scoreMatch[1], 10);
+      }
+
+      const extractShortList = (sectionHeader, isNumbered = false) => {
+        const cleanHeader = sectionHeader.replace(/^#+\s*/, '');
+        const regex = new RegExp(`${cleanHeader}[\\s\\S]*?(?=#|$)`, 'i');
+        const match = analysisText.match(regex);
+        if (!match) return [];
+        const lines = match[0].split('\n');
+        const items = [];
+        for (const line of lines) {
+          const trimmed = line.trim();
+          let fullText = null;
+          if (isNumbered) {
+            const m = trimmed.match(/^\d+\.\s*(.+)$/);
+            if (m) fullText = m[1];
+          } else {
+            const m = trimmed.match(/^[-*•]\s*(.+)$/);
+            if (m) fullText = m[1];
+          }
+          if (fullText) {
+            const shortLabel = fullText.split(/[:.]/)[0].trim().substring(0, 50);
+            if (shortLabel) items.push(shortLabel);
+          }
+        }
+        return items;
+      };
+
+      const top_strengths = extractShortList('## What Customers Love', false);
+      const top_complaints = extractShortList('## Areas to Improve', false);
+      const top_priorities = extractShortList('## Action Recommendations', true);
+
+      await supabase
+        .from('ai_analyses')
+        .update({
+          reputation_score,
+          top_strengths,
+          top_complaints,
+          top_priorities
+        })
+        .eq('id', analysisRecord.id);
 
       // 7. Update usage counters
       const updateFields = {};

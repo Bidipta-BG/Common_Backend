@@ -27,10 +27,16 @@ const googleController = {
    */
   handleGoogleCallback: async (req, res) => {
     try {
-      const { code, state: userId } = req.query;
+      const { code, state: userId, error: authError } = req.query;
+
+      // User clicked "Cancel" on the Google consent screen
+      if (authError) {
+        console.error('Google Auth Error (user cancelled or denied):', authError);
+        return res.redirect(`${FRONTEND_URL}/login`);
+      }
 
       if (!code || !userId) {
-        return res.redirect(`${FRONTEND_URL}/dashboard?google=error`);
+        return res.redirect(`${FRONTEND_URL}/login`);
       }
 
       // 1. Exchange code for tokens

@@ -1,4 +1,5 @@
 const supabase = require('../lib/supabase');
+const { getPlanLimits } = require('../lib/plans');
 
 const getClaimedBusiness = async (req, res) => {
   try {
@@ -16,8 +17,61 @@ const getClaimedBusiness = async (req, res) => {
       return res.status(500).json({ error: "Internal server error" });
     }
 
-    // 2 & 3. Return 200 with or without business
     if (business) {
+      if (!business.verification_phone || business.verification_phone === '+919876543210') {
+        let realPhone = null;
+        const searchQuery = business.business_address ? `${business.business_name} ${business.business_address}` : business.business_name;
+        
+        if (process.env.OUTSCRAPER_API_KEY) {
+          try {
+            const url = new URL('https://api.app.outscraper.com/maps/search-v3');
+            url.searchParams.append('query', searchQuery);
+            url.searchParams.append('limit', '1');
+            url.searchParams.append('language', 'en');
+            const resp = await fetch(url.toString(), { headers: { 'X-API-KEY': process.env.OUTSCRAPER_API_KEY } });
+            if (resp.ok) {
+              const d = await resp.json();
+              if (d.data && Array.isArray(d.data) && d.data.length > 0) {
+                const item = Array.isArray(d.data[0]) ? d.data[0] : d.data;
+                realPhone = item.phone || item.phone_number || item.formatted_phone_number || item.international_phone_number || item.contact_phone || null;
+              }
+            }
+          } catch (err) {
+            console.error('Outscraper phone enrichment error:', err);
+          }
+        }
+
+        if (!realPhone && process.env.GOOGLE_PLACES_API_KEY) {
+          try {
+            const googleUrl = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
+            googleUrl.searchParams.append('query', searchQuery);
+            googleUrl.searchParams.append('key', process.env.GOOGLE_PLACES_API_KEY);
+            const googleResp = await fetch(googleUrl.toString());
+            if (googleResp.ok) {
+              const googleData = await googleResp.json();
+              if (googleData.results && googleData.results.length > 0 && googleData.results[0].place_id) {
+                const placeId = googleData.results[0].place_id;
+                const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_phone_number&key=${process.env.GOOGLE_PLACES_API_KEY}`;
+                const detailsResp = await fetch(detailsUrl);
+                if (detailsResp.ok) {
+                  const detailsData = await detailsResp.json();
+                  if (detailsData.result && detailsData.result.formatted_phone_number) {
+                    realPhone = detailsData.result.formatted_phone_number;
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Google phone enrichment error:', err);
+          }
+        }
+
+        if (realPhone) {
+          business.verification_phone = realPhone;
+          await supabase.from('claimed_businesses').update({ verification_phone: realPhone }).eq('user_id', userId);
+        }
+      }
+
       return res.status(200).json({ claimed: true, business });
     } else {
       return res.status(200).json({ claimed: false, business: null });
@@ -31,7 +85,7 @@ const getClaimedBusiness = async (req, res) => {
 const confirmBusiness = async (req, res) => {
   try {
     const userId = req.userId;
-    const { business_name, business_address, overall_rating, total_review_count } = req.body;
+    const { business_name, business_address, overall_rating, total_review_count, business_phone, place_id } = req.body;
 
     if (!business_name) {
       return res.status(400).json({ error: "business_name is required" });
@@ -94,6 +148,46 @@ const confirmBusiness = async (req, res) => {
       });
     }
 
+    let finalPhone = business_phone || null;
+    const searchQuery = business_address ? `${business_name} ${business_address}` : business_name;
+
+    if (!finalPhone && process.env.OUTSCRAPER_API_KEY) {
+      try {
+        const url = new URL('https://api.app.outscraper.com/maps/search-v3');
+        url.searchParams.append('query', place_id || searchQuery);
+        url.searchParams.append('limit', '1');
+        url.searchParams.append('language', 'en');
+        const resp = await fetch(url.toString(), { headers: { 'X-API-KEY': process.env.OUTSCRAPER_API_KEY } });
+        if (resp.ok) {
+          const d = await resp.json();
+          if (d.data && Array.isArray(d.data) && d.data.length > 0) {
+            const item = Array.isArray(d.data[0]) ? d.data[0] : d.data;
+            finalPhone = item.phone || item.phone_number || item.formatted_phone_number || item.international_phone_number || item.contact_phone || null;
+          }
+        }
+      } catch (err) {
+        console.error('Outscraper confirmBusiness phone enrichment error:', err);
+      }
+    }
+
+    if (!finalPhone && place_id && process.env.GOOGLE_PLACES_API_KEY) {
+      try {
+        const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&fields=formatted_phone_number&key=${process.env.GOOGLE_PLACES_API_KEY}`;
+        const detailsResp = await fetch(detailsUrl);
+        if (detailsResp.ok) {
+          const detailsData = await detailsResp.json();
+          if (detailsData.result && detailsData.result.formatted_phone_number) {
+            finalPhone = detailsData.result.formatted_phone_number;
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching place details for phone:', err);
+      }
+    }
+    if (!finalPhone) {
+      finalPhone = '+919876543210';
+    }
+
     // 4. Insert into claimed_businesses
     const insertData = {
       user_id: userId,
@@ -102,6 +196,7 @@ const confirmBusiness = async (req, res) => {
       business_address: business_address || null,
       overall_rating: overall_rating || null,
       total_review_count: total_review_count || 0,
+      verification_phone: finalPhone,
       platforms_fetched: []
     };
 
@@ -118,8 +213,9 @@ const confirmBusiness = async (req, res) => {
 
     // 5. Return 201
     return res.status(201).json({
-      message: "Business confirmed and locked to your account.",
-      business: inserted
+      message: "Business confirmed. Please verify your business to unlock all intelligence features.",
+      business: inserted,
+      verification_required: true
     });
 
   } catch (error) {
@@ -169,21 +265,31 @@ const searchBusiness = async (req, res) => {
       googleUrl.searchParams.append('query', searchQuery);
       googleUrl.searchParams.append('key', process.env.GOOGLE_PLACES_API_KEY);
       
-      const googleResponse = await fetch(googleUrl.toString());
-      if (googleResponse.ok) {
-        const googleData = await googleResponse.json();
-        if (googleData.results && googleData.results.length > 0) {
-          // Map to Outscraper-like format so downstream mapping works smoothly
-          items = googleData.results.map(r => ({
-            place_id: r.place_id,
-            name: r.name,
-            full_address: r.formatted_address,
-            rating: r.rating,
-            reviews: r.user_ratings_total
-          }));
+      try {
+        const googleResponse = await fetch(googleUrl.toString());
+        if (googleResponse.ok) {
+          const googleData = await googleResponse.json();
+          
+          // Google API returns 200 even for errors like REQUEST_DENIED
+          if (googleData.status !== 'OK' && googleData.status !== 'ZERO_RESULTS') {
+            console.error('Google Places API Error:', googleData.status, googleData.error_message);
+          }
+          
+          if (googleData.results && googleData.results.length > 0) {
+            // Map to Outscraper-like format so downstream mapping works smoothly
+            items = googleData.results.map(r => ({
+              place_id: r.place_id,
+              name: r.name,
+              full_address: r.formatted_address,
+              rating: r.rating,
+              reviews: r.user_ratings_total
+            }));
+          }
+        } else {
+          console.error('Google Places API Error (HTTP Status):', await googleResponse.text());
         }
-      } else {
-        console.error('Google Places API Error:', await googleResponse.text());
+      } catch (err) {
+        console.error('Google Places API Network Error:', err);
       }
     }
 
@@ -195,6 +301,7 @@ const searchBusiness = async (req, res) => {
       place_id: item.place_id || item.id,
       name: item.name || item.title,
       address: item.full_address || item.address,
+      phone: item.phone || item.phone_number || item.formatted_phone_number || item.international_phone_number || item.contact_phone || '',
       rating: item.rating,
       total_ratings: item.reviews || item.total_ratings || item.reviews_data || 0
     }));
@@ -460,37 +567,84 @@ const fetchPlatformReviews = async (req, res) => {
       
       try {
         if (platform === 'google') {
-          const url = new URL('https://api.app.outscraper.com/maps/reviews-v3');
-          const searchQuery = claimedBusiness.business_address ? `${claimedBusiness.business_name}, ${claimedBusiness.business_address}` : claimedBusiness.business_name;
-          url.searchParams.append('query', searchQuery);
-          url.searchParams.append('reviewsLimit', '300');
-          url.searchParams.append('sort', 'newest');
-          url.searchParams.append('ignoreEmpty', 'true'); // Skips reviews without text
-          url.searchParams.append('async', 'false');
-          const resp = await fetch(url.toString(), { headers: { 'X-API-KEY': process.env.OUTSCRAPER_API_KEY } });
-          
-          if (resp.ok) {
-            const d = await resp.json();
-            let reviewsArray = [];
-            if (d.data && d.data.length > 0) {
-              if (d.data[0].reviews_data) {
-                reviewsArray = d.data[0].reviews_data;
-              } else if (Array.isArray(d.data[0]) && d.data[0][0] && d.data[0][0].reviews_data) {
-                reviewsArray = d.data[0][0].reviews_data;
-              }
-            }
+          if (process.env.OUTSCRAPER_API_KEY) {
+            const url = new URL('https://api.app.outscraper.com/maps/reviews-v3');
+            const searchQuery = claimedBusiness.business_address ? `${claimedBusiness.business_name}, ${claimedBusiness.business_address}` : claimedBusiness.business_name;
+            url.searchParams.append('query', searchQuery);
             
-            rawReviews = reviewsArray.map(r => ({
-              platform_review_id: r.review_id || Math.random().toString(36).substr(2, 9),
-              reviewer_name: r.author_title || r.author_name || 'Anonymous',
-              reviewer_photo_url: r.author_image || null,
-              rating: r.review_rating || r.rating || 5,
-              review_text: r.review_text || r.text || '',
-              review_date: new Date(r.review_datetime_utc || r.review_timestamp * 1000 || new Date()).toISOString(),
-              platform_url: r.review_link || ''
-            }));
-          } else {
-            throw new Error('Google Outscraper API failed');
+            const planLimits = getPlanLimits(planStr);
+            let fetchLimit = planLimits.fetch_limit_initial || 100;
+            if (claimedBusiness.last_google_fetch && planLimits.fetch_limit_ongoing) {
+              fetchLimit = planLimits.fetch_limit_ongoing;
+            }
+            url.searchParams.append('reviewsLimit', fetchLimit.toString());
+            
+            if (claimedBusiness.last_google_fetch) {
+              // Outscraper cutoff parameter format is unix timestamp
+              const cutoffUnix = Math.floor(new Date(claimedBusiness.last_google_fetch).getTime() / 1000);
+              url.searchParams.append('cutoff', cutoffUnix.toString());
+            }
+
+            url.searchParams.append('sort', 'newest');
+            url.searchParams.append('ignoreEmpty', 'true'); // Skips reviews without text
+            url.searchParams.append('async', 'false');
+            const resp = await fetch(url.toString(), { headers: { 'X-API-KEY': process.env.OUTSCRAPER_API_KEY } });
+            
+            if (resp.ok) {
+              const d = await resp.json();
+              let reviewsArray = [];
+              if (d.data && d.data.length > 0) {
+                if (d.data[0].reviews_data) {
+                  reviewsArray = d.data[0].reviews_data;
+                } else if (Array.isArray(d.data[0]) && d.data[0][0] && d.data[0][0].reviews_data) {
+                  reviewsArray = d.data[0][0].reviews_data;
+                }
+              }
+              
+              rawReviews = reviewsArray.map(r => ({
+                platform_review_id: r.review_id || Math.random().toString(36).substr(2, 9),
+                reviewer_name: r.author_title || r.author_name || 'Anonymous',
+                reviewer_photo_url: r.author_image || null,
+                rating: r.review_rating || r.rating || 5,
+                review_text: r.review_text || r.text || '',
+                review_date: new Date(r.review_datetime_utc || r.review_timestamp * 1000 || new Date()).toISOString(),
+                platform_url: r.review_link || ''
+              }));
+            } else {
+              console.error('Google Outscraper API failed:', await resp.text());
+            }
+          }
+
+          // Fallback to Google Places API Details if Outscraper failed or returned 0 reviews
+          if (rawReviews.length === 0 && process.env.GOOGLE_PLACES_API_KEY && claimedBusiness.place_id) {
+            console.log('[DEBUG] Outscraper yielded 0 reviews, falling back to Google Places Details API for place_id:', claimedBusiness.place_id);
+            const googleDetailsUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json');
+            googleDetailsUrl.searchParams.append('place_id', claimedBusiness.place_id);
+            googleDetailsUrl.searchParams.append('fields', 'reviews,name,rating');
+            googleDetailsUrl.searchParams.append('key', process.env.GOOGLE_PLACES_API_KEY);
+
+            const googleResp = await fetch(googleDetailsUrl.toString());
+            if (googleResp.ok) {
+              const googleData = await googleResp.json();
+              if (googleData.result && googleData.result.reviews) {
+                rawReviews = googleData.result.reviews.map(r => ({
+                  platform_review_id: Math.random().toString(36).substr(2, 9),
+                  reviewer_name: r.author_name || 'Anonymous',
+                  reviewer_photo_url: r.profile_photo_url || null,
+                  rating: r.rating || 5,
+                  review_text: r.text || '',
+                  review_date: new Date(r.time ? r.time * 1000 : new Date()).toISOString(),
+                  platform_url: r.author_url || ''
+                }));
+                console.log(`[DEBUG] Google Places Fallback successfully fetched ${rawReviews.length} reviews.`);
+              }
+            } else {
+              console.error('Google Places Details API failed:', await googleResp.text());
+            }
+          }
+
+          if (rawReviews.length === 0) {
+            throw new Error('No reviews found via Outscraper or Google Places API');
           }
 
         } else {
@@ -607,10 +761,14 @@ const fetchPlatformReviews = async (req, res) => {
             
           const currentTotal = existingConn ? (existingConn.total_reviews_fetched || 0) : 0;
           
+          if (platform === 'google' && rawReviews.length > 0) {
+            await supabase.from('claimed_businesses').update({ last_google_fetch: new Date().toISOString() }).eq('user_id', userId);
+          }
+
           await supabase.from('platform_connections').upsert({
             user_id: userId,
             platform,
-            locked: plan === 'free',
+            locked: planStr === 'free',
             last_fetched_at: new Date().toISOString(),
             total_reviews_fetched: currentTotal + newCount
           }, { onConflict: 'user_id, platform' });

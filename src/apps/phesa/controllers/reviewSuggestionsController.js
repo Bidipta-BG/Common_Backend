@@ -113,8 +113,15 @@ const regenerateSuggestions = async (req, res) => {
     }
 
     let limit = 0;
-    if (plan === 'starter') limit = 1;
-    if (plan === 'pro') limit = 3;
+    let refreshDays = 0;
+    if (plan === 'starter') {
+      limit = 1;
+      refreshDays = 90;
+    }
+    if (plan === 'pro') {
+      limit = Infinity;
+      refreshDays = 0;
+    }
 
     // Fetch history row (star_rating = 1, suggestion_text starts with __HISTORY__:)
     const { data: historyRows } = await supabase
@@ -136,19 +143,21 @@ const regenerateSuggestions = async (req, res) => {
       }
     }
 
-    // Filter to last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    history = history.filter(dateStr => new Date(dateStr) > thirtyDaysAgo);
+    // Filter to last X days
+    if (refreshDays > 0) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - refreshDays);
+      history = history.filter(dateStr => new Date(dateStr) > daysAgo);
 
-    if (history.length >= limit) {
-      const oldestDate = new Date(history[0]);
-      const nextAvailable = new Date(oldestDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-      return res.status(403).json({
-        error: "refresh_limit_reached",
-        message: `You have reached your limit of ${limit} refreshes per 30 days for this plan.`,
-        next_available_at: nextAvailable.toISOString()
-      });
+      if (history.length >= limit) {
+        const oldestDate = new Date(history[0]);
+        const nextAvailable = new Date(oldestDate.getTime() + refreshDays * 24 * 60 * 60 * 1000);
+        return res.status(403).json({
+          error: "refresh_limit_reached",
+          message: `You have reached your limit of ${limit} refreshes per ${refreshDays === 90 ? '3 months' : refreshDays + ' days'} for this plan.`,
+          next_available_at: nextAvailable.toISOString()
+        });
+      }
     }
 
     // Add current generation to history
@@ -298,7 +307,7 @@ Format your response as JSON only, no markdown:
       message: "Suggestions refreshed successfully",
       generated: inserts.length,
       form_id: id,
-      remaining_clicks: limit - history.length
+      remaining_clicks: limit === Infinity ? 'unlimited' : limit - history.length
     });
 
   } catch (error) {

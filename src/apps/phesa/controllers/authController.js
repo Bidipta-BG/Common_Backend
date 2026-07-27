@@ -36,10 +36,16 @@ const authController = {
 
   googleCallback: async (req, res) => {
     try {
-      const { code } = req.query;
+      const { code, error: authError } = req.query;
+
+      // User clicked "Cancel" on the Google consent screen
+      if (authError) {
+        console.error('Google Auth cancelled by user:', authError);
+        return res.redirect(`${PHESA_FRONTEND_URL}/login`);
+      }
 
       if (!code) {
-        return res.status(400).json({ error: 'Authorization code is required' });
+        return res.redirect(`${PHESA_FRONTEND_URL}/login`);
       }
 
       const oauth2Client = new google.auth.OAuth2(
@@ -66,39 +72,25 @@ const authController = {
       if (listError) throw listError;
 
       let user = users.users.find(u => u.email === googleUser.email);
-      let userId;
 
-      if (!user) {
-        // Create new user in auth.users if they don't exist
-        const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-          email: googleUser.email,
-          email_confirm: true,
-          user_metadata: {
+      if (user) {
+        // 4. Upsert into public.profiles for existing users
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            email: googleUser.email,
             full_name: googleUser.name,
-            avatar_url: googleUser.picture
-          }
-        });
-        if (createError) throw createError;
-        userId = newUser.user.id;
-      } else {
-        userId = user.id;
-      }
+            avatar_url: googleUser.picture,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
 
-      // 4. Upsert into public.profiles
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          email: googleUser.email,
-          full_name: googleUser.name,
-          avatar_url: googleUser.picture,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
-
-      if (profileError) {
-        console.error('Error syncing profile:', profileError);
-        // We don't fail the whole login if profile sync fails, but we log it
+        if (profileError) {
+          console.error('Error syncing profile:', profileError);
+        }
       }
+      // If user does not exist, we let the frontend signInWithIdToken create the user cleanly 
+      // with provider: 'google', avoiding Gotrue account linking emails entirely.
 
       // 5. Redirect back to frontend callback page
       const redirectUrl = new URL(`${PHESA_FRONTEND_URL}/auth/callback`);

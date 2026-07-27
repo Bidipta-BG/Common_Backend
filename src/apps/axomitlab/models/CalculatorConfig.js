@@ -57,6 +57,13 @@ const PowerUpSchema = new mongoose.Schema({
 const CalculatorConfigSchema = new mongoose.Schema({
     basePrice: { type: Number, required: true },
     currency: { type: String, default: 'INR' },
+    discount: {
+        enabled: { type: Boolean, default: true },
+        percentage: { type: Number, default: 50 },
+        label: { type: String, default: 'Early Bird Offer' },
+        message: { type: String, default: 'You\'re eligible for our 50% Early Bird Discount!' },
+        badgeText: { type: String, default: '🎉 Huge Savings for Lucky Clients!' }
+    },
     upfrontDiscount: { type: Number, default: 0.10 },
     upfrontAgreementPercentage: { type: Number, default: 0.10 },
     estimationBuffer: { type: Number, default: 0.20 },

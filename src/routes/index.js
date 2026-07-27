@@ -8,7 +8,8 @@ const shivjiPujaRoutes = require('../apps/shivji-puja/routes');
 const hanumanjiPujaRoutes = require('../apps/hanumanji-puja/routes');
 const phesaRoutes = require('../apps/phesa');
 const uploadFileRoutes = require('../apps/uploadFile');
-
+const trkerRoutes = require('../apps/trker');
+const learnitaiRoutes = require('../apps/learnitai/routes');
 
 router.get('/health', (req, res) => res.json({ status: 'up' }));
 router.use('/greeting-app', greetingRoutes);
@@ -19,6 +20,7 @@ router.use('/shivji-puja', shivjiPujaRoutes);
 router.use('/hanumanji-puja', hanumanjiPujaRoutes);
 router.use('/phesa', phesaRoutes);
 router.use('/upload', uploadFileRoutes);
-
+router.use('/trker', trkerRoutes);
+router.use('/learnitai', learnitaiRoutes);
 
 module.exports = router;

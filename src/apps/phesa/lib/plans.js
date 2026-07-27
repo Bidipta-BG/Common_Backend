@@ -25,7 +25,15 @@ const PLANS = {
       video: false,
       screenshot: false,
       branding: true,
-      ai_analysis: 1,
+      ai_analysis_lifetime: 1,
+      ai_analysis_monthly: 0,
+      fetch_limit_initial: 100,
+      fetch_limit_ongoing: 0,
+      ai_analysis_reviews_limit: 100,
+      competitor_limit: 0,
+      suggestion_pool_per_star: 2,
+      suggestions_shown: 1,
+      suggestion_refresh: 0
     }
   },
   starter: {
@@ -34,11 +42,18 @@ const PLANS = {
     limits: {
       testimonials: 50,
       forms: 4,
-      widgets: 3,
+      widgets: 4,
       video: false,
       screenshot: true,
       branding: false,
-      ai_analysis: 1,
+      ai_analysis_monthly: 1,
+      fetch_limit_initial: 500,
+      fetch_limit_ongoing: 150,
+      ai_analysis_reviews_limit: 500,
+      competitor_limit: 2,
+      suggestion_pool_per_star: 4,
+      suggestions_shown: 2,
+      suggestion_refresh_days: 90
     }
   },
   pro: {
@@ -51,6 +66,14 @@ const PLANS = {
       video: true,
       screenshot: true,
       branding: false,
+      ai_analysis_monthly: 3,
+      fetch_limit_initial: 1000,
+      fetch_limit_ongoing: 300,
+      ai_analysis_reviews_limit: 1000,
+      competitor_limit: 5,
+      suggestion_pool_per_star: 6,
+      suggestions_shown: 3,
+      suggestion_refresh_days: 0
     }
   }
 };
