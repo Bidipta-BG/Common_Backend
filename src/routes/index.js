@@ -10,6 +10,7 @@ const phesaRoutes = require('../apps/phesa');
 const uploadFileRoutes = require('../apps/uploadFile');
 const trkerRoutes = require('../apps/trker');
 const learnitaiRoutes = require('../apps/learnitai/routes');
+const starttambolaRoutes = require('../apps/starttambola');
 
 router.get('/health', (req, res) => res.json({ status: 'up' }));
 router.use('/greeting-app', greetingRoutes);
@@ -22,5 +23,6 @@ router.use('/phesa', phesaRoutes);
 router.use('/upload', uploadFileRoutes);
 router.use('/trker', trkerRoutes);
 router.use('/learnitai', learnitaiRoutes);
+router.use('/starttambola', starttambolaRoutes);
 
 module.exports = router;
