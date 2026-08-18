@@ -17,6 +17,7 @@ const { internalRouter: tenantsInternalRoutes,
         publicRouter:   tenantsPublicRoutes } = require('./routes/tenants.routes');
 const { internalRouter: subscriptionsInternalRoutes,
         authenticatedRouter: subscriptionsAuthRoutes } = require('./routes/subscriptions.routes');
+const passwordRoutes     = require('./routes/password.routes');
 
 // ─── Bootstrap: start the subscription expiry scheduler ───────────────────────
 // Runs checkAllExpiredSubscriptions every 15 minutes via setInterval.
@@ -44,6 +45,10 @@ router.use('/health', healthRoutes);
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 // GET /api/starttambola/auth/me  (requires valid Supabase JWT)
 router.use('/auth', authRoutes);
+
+// ─── Password Reset ───────────────────────────────────────────────────────────
+// POST /api/starttambola/password/update (requires valid Supabase JWT)
+router.use('/password', passwordRoutes);
 
 // ─── Webhooks (no auth — signature-verified) ──────────────────────────────────
 // POST /api/starttambola/webhooks/razorpay

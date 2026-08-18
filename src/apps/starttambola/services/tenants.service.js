@@ -40,6 +40,7 @@ const createTenant = async ({
   ownerName,
   ownerEmail,
   ownerPhone,
+  ownerPassword,
   plan,
   themeId,
 }) => {
@@ -81,6 +82,7 @@ const createTenant = async ({
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: ownerEmail,
     email_confirm: true, // mark email as confirmed so login works immediately
+    password: ownerPassword || 'TempPassword123!', // fallback if no password provided
     user_metadata: {
       full_name: ownerName,
       phone:     ownerPhone,
