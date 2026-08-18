@@ -27,7 +27,7 @@ const listBookingRequests = async (tenantId, statusFilter) => {
     .from('booking_requests')
     .select('*')
     .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false });
+    .order('requested_at', { ascending: false });
 
   if (statusFilter) {
     query = query.eq('status', statusFilter);

@@ -203,8 +203,6 @@ const _processGameTick = async (gameId) => {
 
   const { tenantId, calledNumbers, calledSet } = state;
 
-  console.log(`[DEBUG-TICK] 🎲 Firing tick for game ${gameId.slice(0,8)}... called so far: ${calledNumbers.length}/90`);
-
   // ── Pick the next uncalled number ─────────────────────────────────────────
   const nextNumber = _pickNextNumber(calledSet);
 
@@ -216,7 +214,6 @@ const _processGameTick = async (gameId) => {
   }
 
   const sequence = calledNumbers.length + 1;
-  console.log(`[DEBUG-TICK] ✅ Picked number: ${nextNumber} (sequence #${sequence}). Inserting into DB...`);
 
   // ── Insert into DB ────────────────────────────────────────────────────────
   const { error: insertError } = await supabaseAdmin
@@ -232,8 +229,6 @@ const _processGameTick = async (gameId) => {
     return;
   }
 
-  console.log(`[DEBUG-TICK] 🟢 DB insert SUCCESS. Number ${nextNumber} saved. Broadcasting...`);
-
   // ── Update in-memory cache ────────────────────────────────────────────────
   calledNumbers.push(nextNumber);
   calledSet.add(nextNumber);
@@ -246,9 +241,7 @@ const _processGameTick = async (gameId) => {
     remaining:   90 - calledNumbers.length,
   });
 
-  console.log(`[DEBUG-TICK] 📡 Broadcast sent. Total called: ${calledNumbers.length}/90`);
-
-  // ── Check dividends ───────────────────────────────────────────────────────
+  // ── Check for newly won dividends ───────────────────────────────────────────────────────
   let allWon;
   try {
     allWon = await _checkDividends(gameId);
@@ -281,13 +274,7 @@ const _startCentralLoop = () => {
     _loopDebugCounter++;
 
     // Log loop status every 10 seconds (every 20 ticks at 500ms)
-    if (_loopDebugCounter % 20 === 0) {
-      console.log(`[DEBUG-LOOP] ⏰ Central loop alive. Games in memory: ${_gameState.size}`);
-      for (const [gId, s] of _gameState.entries()) {
-        const dueIn = Math.round((s.nextCallDue.getTime() - now) / 1000);
-        console.log(`  └─ Game ${gId.slice(0,8)}: called=${s.calledNumbers.length}/90, nextCallDue in ${dueIn}s, processing=${s.processing}`);
-      }
-    }
+    // if (_loopDebugCounter % 20 === 0) { ... removed for log hygiene ... }
 
     for (const [gameId, state] of _gameState.entries()) {
       // Skip if: already processing, or not yet due

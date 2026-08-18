@@ -26,7 +26,7 @@ const expireStaleBookingRequests = async () => {
     .from('booking_requests')
     .select('id, ticket_id')
     .eq('status', 'pending')
-    .lt('created_at', cutoff);
+    .lt('requested_at', cutoff);
 
   if (fetchError) {
     console.error('[BookingExpiry] Failed to fetch stale requests:', fetchError.message);
