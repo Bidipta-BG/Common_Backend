@@ -105,6 +105,72 @@ const createTenant = async ({
     throw new AppError(`Auth user creation failed: ${authError.message}`, 'AUTH_ERROR', 500);
   }
 
+  // ── Step 4: Automatically create the Bumper Tenant ─────────────────────────
+  try {
+    const bumperDomain = `bumper.${domain}`;
+    let bumperEmail = ownerEmail;
+    
+    // Create +bumper email (e.g., john@gmail.com -> john+bumper@gmail.com)
+    if (ownerEmail.includes('@')) {
+      const [userPart, domainPart] = ownerEmail.split('@');
+      bumperEmail = `${userPart}+bumper@${domainPart}`;
+    }
+
+    // Insert Bumper Tenant
+    const { data: bumperTenant, error: bumperTenantError } = await supabaseAdmin
+      .from('tenants')
+      .insert({
+        business_name: businessName,
+        domain: bumperDomain,
+        owner_name: ownerName,
+        owner_email: bumperEmail,
+        owner_phone: ownerPhone,
+        status: 'pending_activation',
+        theme_id: themeId || null,
+        is_bumper_game: true,
+      })
+      .select()
+      .single();
+
+    if (bumperTenantError) throw bumperTenantError;
+
+    // Attach Bumper Domain to Vercel
+    await attachDomainToVercel(bumperDomain);
+
+    // Create Bumper Subscription
+    const { error: bumperSubError } = await supabaseAdmin
+      .from('subscriptions')
+      .insert({
+        tenant_id: bumperTenant.id,
+        plan,
+        status: 'pending_activation',
+      });
+
+    if (bumperSubError) throw bumperSubError;
+
+    // Create Supabase Auth User for Bumper Admin
+    const { error: bumperAuthError } = await supabaseAdmin.auth.admin.createUser({
+      email: bumperEmail,
+      email_confirm: true,
+      password: ownerPassword || 'TempPassword123!',
+      user_metadata: {
+        full_name: ownerName,
+        phone: ownerPhone,
+      },
+      app_metadata: {
+        tenant_id: bumperTenant.id,
+        role: 'tenant_admin',
+      },
+    });
+
+    if (bumperAuthError) {
+      console.error(`[Bumper Auth] Failed to create auth user for ${bumperEmail}:`, bumperAuthError.message);
+    }
+
+  } catch (err) {
+    console.error('[Bumper Setup] Failed to auto-provision bumper environment:', err);
+  }
+
   return { tenant, subscription };
 };
 
@@ -116,7 +182,7 @@ const createTenant = async ({
 const getTenantByDomain = async (domain) => {
   const { data, error } = await supabaseAdmin
     .from('tenants')
-    .select('id, business_name, domain, status, theme_id, theme_overrides, organizer_whatsapp_number, organizer_whatsapp_group_link')
+    .select('id, business_name, domain, status, theme_id, theme_overrides, organizer_whatsapp_number, organizer_whatsapp_group_link, is_bumper_game')
     .eq('domain', domain)
     .single();
 
@@ -131,6 +197,7 @@ const getTenantByDomain = async (domain) => {
     themeOverrides:  data.theme_overrides,
     whatsappNumber:  data.organizer_whatsapp_number ?? null,
     whatsappGroupLink: data.organizer_whatsapp_group_link ?? null,
+    is_bumper_game:  data.is_bumper_game ?? false,
   };
 };
 
@@ -153,6 +220,7 @@ const getTenantById = async (tenantId) => {
       theme_overrides,
       organizer_whatsapp_number,
       organizer_whatsapp_group_link,
+      is_bumper_game,
       themes (
         id,
         name,
@@ -174,6 +242,7 @@ const getTenantById = async (tenantId) => {
     themeOverrides:  data.theme_overrides,
     whatsappNumber:  data.organizer_whatsapp_number ?? null,
     whatsappGroupLink: data.organizer_whatsapp_group_link ?? null,
+    is_bumper_game:  data.is_bumper_game ?? false,
     theme:           data.themes ?? null,   // full theme row if a theme is selected
   };
 };
