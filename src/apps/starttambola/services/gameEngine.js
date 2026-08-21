@@ -151,7 +151,7 @@ const _checkDividends = async (gameId) => {
 
   // All pending dividends won?
   const allWon = dividends.every((d) => wonDividends.has(d.id));
-  return allWon;
+  return { allWon, newWinnersCount: newWinnerRows.length };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,9 +242,15 @@ const _processGameTick = async (gameId) => {
   });
 
   // ── Check for newly won dividends ───────────────────────────────────────────────────────
-  let allWon;
+  let allWon = false;
   try {
-    allWon = await _checkDividends(gameId);
+    const result = await _checkDividends(gameId);
+    allWon = result.allWon;
+    
+    if (result.newWinnersCount > 0) {
+      console.log(`[GameEngine] Game ${gameId}: Pausing for 6s to celebrate ${result.newWinnersCount} winner(s).`);
+      state.nextCallDue = new Date(state.nextCallDue.getTime() + 6000);
+    }
   } catch (err) {
     console.error(`[GameEngine] Game ${gameId}: dividend check failed:`, err.message);
     return; // don't complete on dividend check failure — retry next tick
