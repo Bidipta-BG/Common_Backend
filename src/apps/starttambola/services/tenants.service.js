@@ -83,63 +83,58 @@ const createTenant = async ({
 
   if (tenantError) handleSupabaseError(tenantError, `Tenant with domain '${domain}'`);
 
-  // ── Step 1.5: Attach Domain to Vercel ──────────────────────────────────────
-  await attachDomainToVercel(domain);
+  let createdSubscription = null;
+  let mainAuthUserId = null;
+  let bumperTenantId = null;
 
-  // ── Step 2: Create subscription ───────────────────────────────────────────
-  const { data: subscription, error: subError } = await supabaseAdmin
-    .from('subscriptions')
-    .insert({
-      tenant_id: tenant.id,
-      plan,
-      status: 'pending_activation',
-    })
-    .select()
-    .single();
-
-  if (subError) handleSupabaseError(subError, 'Subscription');
-
-  // ── Step 3: Create Supabase Auth user for the tenant owner ────────────────
-  // app_metadata is set server-side only — never editable by the user.
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email: ownerEmail,
-    email_confirm: true, // mark email as confirmed so login works immediately
-    password: ownerPassword || 'TempPassword123!', // fallback if no password provided
-    user_metadata: {
-      full_name: ownerName,
-      phone:     ownerPhone,
-    },
-    app_metadata: {
-      tenant_id: tenant.id,
-      role: 'tenant_admin',
-    },
-  });
-
-  if (authError) {
-    // ── ROLLBACK: delete the tenant + subscription rows committed in Steps 1 & 2.
-    // Without this, every failed registration permanently occupies the domain and
-    // phone number, causing the user to see "already taken" errors on their next attempt.
-    console.warn(`[createTenant] Auth user creation failed for ${ownerEmail}. Rolling back tenant ${tenant.id}...`);
-    await supabaseAdmin.from('subscriptions').delete().eq('tenant_id', tenant.id).catch(e =>
-      console.error('[createTenant] Rollback: failed to delete subscription:', e)
-    );
-    await supabaseAdmin.from('tenants').delete().eq('id', tenant.id).catch(e =>
-      console.error('[createTenant] Rollback: failed to delete tenant:', e)
-    );
-
-    if (authError.message?.toLowerCase().includes('already registered') ||
-        authError.message?.toLowerCase().includes('already been registered')) {
-      throw new AppError(
-        `A Supabase Auth user with email '${ownerEmail}' already exists`,
-        'CONFLICT',
-        409
-      );
-    }
-    throw new AppError(`Auth user creation failed: ${authError.message}`, 'AUTH_ERROR', 500);
-  }
-
-  // ── Step 4: Automatically create the Bumper Tenant ─────────────────────────
   try {
+    // ── Step 1.5: Attach Domain to Vercel ──────────────────────────────────────
+    await attachDomainToVercel(domain);
+
+    // ── Step 2: Create subscription ───────────────────────────────────────────
+    const { data: subscription, error: subError } = await supabaseAdmin
+      .from('subscriptions')
+      .insert({
+        tenant_id: tenant.id,
+        plan,
+        status: 'pending_activation',
+      })
+      .select()
+      .single();
+
+    if (subError) throw subError;
+    createdSubscription = subscription;
+
+    // ── Step 3: Create Supabase Auth user for the tenant owner ────────────────
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: ownerEmail,
+      email_confirm: true, // mark email as confirmed so login works immediately
+      password: ownerPassword || 'TempPassword123!', // fallback if no password provided
+      user_metadata: {
+        full_name: ownerName,
+        phone:     ownerPhone,
+      },
+      app_metadata: {
+        tenant_id: tenant.id,
+        role: 'tenant_admin',
+      },
+    });
+
+    if (authError) {
+      if (authError.message?.toLowerCase().includes('already registered') ||
+          authError.message?.toLowerCase().includes('already been registered')) {
+        throw new AppError(
+          `A Supabase Auth user with email '${ownerEmail}' already exists`,
+          'CONFLICT',
+          409
+        );
+      }
+      throw new AppError(`Auth user creation failed: ${authError.message}`, 'AUTH_ERROR', 500);
+    }
+    
+    mainAuthUserId = authData.user.id;
+
+    // ── Step 4: Automatically create the Bumper Tenant ─────────────────────────
     const bumperDomain = `bumper.${domain}`;
     let bumperEmail = ownerEmail;
     
@@ -166,6 +161,7 @@ const createTenant = async ({
       .single();
 
     if (bumperTenantError) throw bumperTenantError;
+    bumperTenantId = bumperTenant.id;
 
     // Attach Bumper Domain to Vercel
     await attachDomainToVercel(bumperDomain);
@@ -197,14 +193,47 @@ const createTenant = async ({
     });
 
     if (bumperAuthError) {
-      console.error(`[Bumper Auth] Failed to create auth user for ${bumperEmail}:`, bumperAuthError.message);
+      throw new AppError(`Bumper Auth user creation failed: ${bumperAuthError.message}`, 'AUTH_ERROR', 500);
     }
 
+    return { tenant, subscription: createdSubscription };
   } catch (err) {
-    console.error('[Bumper Setup] Failed to auto-provision bumper environment:', err);
-  }
+    console.warn(`[createTenant] Registration failed for ${ownerEmail}. Rolling back...`);
+    
+    // Rollback Subscriptions
+    await supabaseAdmin.from('subscriptions').delete().eq('tenant_id', tenant.id).then(({ error }) => {
+      if (error) console.error('[createTenant] Rollback: failed to delete subscription:', error);
+    });
+    if (bumperTenantId) {
+      await supabaseAdmin.from('subscriptions').delete().eq('tenant_id', bumperTenantId).then(({ error }) => {
+        if (error) console.error('[createTenant] Rollback: failed to delete bumper subscription:', error);
+      });
+    }
 
-  return { tenant, subscription };
+    // Rollback Tenants
+    await supabaseAdmin.from('tenants').delete().eq('id', tenant.id).then(({ error }) => {
+      if (error) console.error('[createTenant] Rollback: failed to delete tenant:', error);
+    });
+    if (bumperTenantId) {
+      await supabaseAdmin.from('tenants').delete().eq('id', bumperTenantId).then(({ error }) => {
+        if (error) console.error('[createTenant] Rollback: failed to delete bumper tenant:', error);
+      });
+    }
+
+    // Rollback Auth User
+    if (mainAuthUserId) {
+      await supabaseAdmin.auth.admin.deleteUser(mainAuthUserId).then(({ error }) => {
+        if (error) console.error('[createTenant] Rollback: failed to delete main auth user:', error);
+      });
+    }
+
+    if (err instanceof AppError) {
+      throw err;
+    }
+    
+    // If it's a Supabase error from any database step, pass it to the handler
+    handleSupabaseError(err, 'Tenant Setup');
+  }
 };
 
 // ─── getTenantByDomain ──────────────────────────────────────────────────────────
