@@ -24,6 +24,28 @@ const attachDomainToVercel = async (domain) => {
   }
 };
 
+// ─── checkAvailability ────────────────────────────────────────────────────────
+// Pre-flight check: runs three parallel SELECT queries against the tenants
+// table to verify that email, phone, and domain are not already registered.
+// Returns { emailTaken, phoneTaken, domainTaken } — all booleans.
+// NOTE: The Supabase Auth system is a separate source of truth for emails, but
+// is checked as a safety net inside createTenant itself (which throws a 409
+// CONFLICT that the frontend handles gracefully — see RegisterForm.tsx).
+
+const checkAvailability = async ({ email, phone, domain }) => {
+  const [emailCheck, phoneCheck, domainCheck] = await Promise.all([
+    supabaseAdmin.from('tenants').select('id').ilike('owner_email', email).maybeSingle(),
+    supabaseAdmin.from('tenants').select('id').eq('owner_phone', phone).maybeSingle(),
+    supabaseAdmin.from('tenants').select('id').eq('domain', domain).maybeSingle(),
+  ]);
+
+  return {
+    emailTaken:  emailCheck.data  !== null,
+    phoneTaken:  phoneCheck.data  !== null,
+    domainTaken: domainCheck.data !== null,
+  };
+};
+
 // ─── createTenant ─────────────────────────────────────────────────────────────
 // 1. Inserts a tenant row (status: 'pending_activation').
 // 2. Inserts a subscription row (status: 'pending_activation', plan from body).
@@ -94,6 +116,17 @@ const createTenant = async ({
   });
 
   if (authError) {
+    // ── ROLLBACK: delete the tenant + subscription rows committed in Steps 1 & 2.
+    // Without this, every failed registration permanently occupies the domain and
+    // phone number, causing the user to see "already taken" errors on their next attempt.
+    console.warn(`[createTenant] Auth user creation failed for ${ownerEmail}. Rolling back tenant ${tenant.id}...`);
+    await supabaseAdmin.from('subscriptions').delete().eq('tenant_id', tenant.id).catch(e =>
+      console.error('[createTenant] Rollback: failed to delete subscription:', e)
+    );
+    await supabaseAdmin.from('tenants').delete().eq('id', tenant.id).catch(e =>
+      console.error('[createTenant] Rollback: failed to delete tenant:', e)
+    );
+
     if (authError.message?.toLowerCase().includes('already registered') ||
         authError.message?.toLowerCase().includes('already been registered')) {
       throw new AppError(
@@ -274,4 +307,4 @@ const updateTenant = async (tenantId, updates) => {
   return data;
 };
 
-module.exports = { createTenant, getTenantByDomain, getTenantById, updateTenant };
+module.exports = { checkAvailability, createTenant, getTenantByDomain, getTenantById, updateTenant };

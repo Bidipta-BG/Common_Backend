@@ -10,6 +10,18 @@ const createTenant = async (req, res, next) => {
   }
 };
 
+// ─── POST /internal/tenants/check-availability ───────────────────────────────
+// Pre-flight check: verifies email, phone, and domain are not already taken.
+// Returns { data: { emailTaken, phoneTaken, domainTaken } } — no DB writes.
+const checkAvailability = async (req, res, next) => {
+  try {
+    const result = await tenantsService.checkAvailability(req.body);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // ─── GET /tenants/by-domain/:domain ──────────────────────────────────────────
 const getByDomain = async (req, res, next) => {
   try {
@@ -39,4 +51,4 @@ const updateTenant = async (req, res, next) => {
   }
 };
 
-module.exports = { createTenant, getByDomain, getTenantById, updateTenant };
+module.exports = { checkAvailability, createTenant, getByDomain, getTenantById, updateTenant };

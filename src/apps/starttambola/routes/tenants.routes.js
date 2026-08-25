@@ -1,6 +1,6 @@
 const express = require('express');
 const { validateBody, z } = require('../utils/validateBody');
-const { createTenant, getByDomain, getTenantById, updateTenant } = require('../controllers/tenants.controller');
+const { checkAvailability, createTenant, getByDomain, getTenantById, updateTenant } = require('../controllers/tenants.controller');
 const { getCurrentGame } = require('../controllers/games.controller');
 
 // ─── Zod schema: POST /internal/tenants ──────────────────────────────────────
@@ -19,9 +19,19 @@ const createTenantSchema = z.object({
   themeId:      z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, 'themeId must be a valid UUID').optional(),
 });
 
+// ─── Zod schema: POST /internal/tenants/check-availability ───────────────────
+const checkAvailabilitySchema = z.object({
+  email:  z.string().email('email must be a valid email address'),
+  phone:  z.string().min(6, 'phone is required'),
+  domain: z.string().min(1, 'domain is required'),
+});
+
 // ─── Internal router (mounted at /api/starttambola/internal/tenants) ──────────
 // All routes here require requireSuperAdminKey (applied at mount in index.js).
 const internalRouter = express.Router();
+
+// POST /internal/tenants/check-availability  ← must be registered BEFORE /:id routes
+internalRouter.post('/check-availability', validateBody(checkAvailabilitySchema), checkAvailability);
 
 // POST /internal/tenants
 // Creates tenant + subscription + Supabase Auth owner user.
