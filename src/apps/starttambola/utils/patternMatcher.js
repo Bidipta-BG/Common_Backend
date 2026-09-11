@@ -78,12 +78,34 @@ const isPatternComplete = (patternType, grid, calledSet) => {
     case 'quick_five':
       return _ticketNums(grid).filter((n) => calledSet.has(n)).length >= 5;
 
+    case 'quick_six':
+      return _ticketNums(grid).filter((n) => calledSet.has(n)).length >= 6;
+
+    case 'quick_seven':
+      return _ticketNums(grid).filter((n) => calledSet.has(n)).length >= 7;
+
     case 'corners':
       return _cornerNums(grid).every((n) => calledSet.has(n));
 
-    case 'half_seat_bonus':
-      // TODO: Confirm with product owner — current: any 8 of 15 numbers called.
-      return _ticketNums(grid).filter((n) => calledSet.has(n)).length >= 8;
+    case 'star': {
+      // 4 corners + 3rd filled number of the middle row
+      const cornerNums = _cornerNums(grid);
+      const middleRow  = _rowNums(grid, 1);
+      // 3rd filled number = index 2
+      const centerNum  = middleRow.length >= 3 ? middleRow[2] : null;
+      const starNums   = centerNum ? [...new Set([...cornerNums, centerNum])] : cornerNums;
+      // We must match exactly 5 numbers (if centerNum was valid)
+      if (starNums.length < 5) return false;
+      return starNums.every((n) => calledSet.has(n));
+    }
+
+    case 'box_bonus': {
+      // Every row must independently have >= 2 marked numbers
+      return [0, 1, 2].every((row) => {
+        const markedCount = _rowNums(grid, row).filter(n => calledSet.has(n)).length;
+        return markedCount >= 2;
+      });
+    }
 
     default:
       console.warn(`[PatternMatcher] Unknown pattern_type '${patternType}' — returning false. Add implementation above.`);
@@ -126,13 +148,32 @@ const getMatchedNumbers = (patternType, grid, calledSet, calledOrdered = []) => 
       return calledOrdered.filter((n) => onTicket.has(n)).slice(0, 5);
     }
 
+    case 'quick_six': {
+      const onTicket = new Set(_ticketNums(grid));
+      return calledOrdered.filter((n) => onTicket.has(n)).slice(0, 6);
+    }
+
+    case 'quick_seven': {
+      const onTicket = new Set(_ticketNums(grid));
+      return calledOrdered.filter((n) => onTicket.has(n)).slice(0, 7);
+    }
+
     case 'corners':
       return _cornerNums(grid).filter((n) => calledSet.has(n));
 
-    case 'half_seat_bonus': {
-      // First 8 numbers called that are on this ticket
-      const onTicket = new Set(_ticketNums(grid));
-      return calledOrdered.filter((n) => onTicket.has(n)).slice(0, 8);
+    case 'star': {
+      const cornerNums = _cornerNums(grid);
+      const middleRow  = _rowNums(grid, 1);
+      const centerNum  = middleRow.length >= 3 ? middleRow[2] : null;
+      const starNums   = centerNum ? [...new Set([...cornerNums, centerNum])] : cornerNums;
+      if (starNums.length < 5) return [];
+      return starNums.filter((n) => calledSet.has(n));
+    }
+
+    case 'box_bonus': {
+      return [0, 1, 2].flatMap((row) => {
+        return _rowNums(grid, row).filter(n => calledSet.has(n)).slice(0, 2);
+      });
     }
 
     default:

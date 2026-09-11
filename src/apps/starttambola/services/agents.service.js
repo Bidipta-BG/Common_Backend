@@ -29,21 +29,33 @@ const _getAgentOrThrow = async (tenantId, agentId) => {
 
 const createAgent = async (tenantId, {
   name,
-  phone,
   password,
-  commissionPerTicket,
 }, createdBy) => {
-  const rawPhone = phone.trim();
+  const normalizedName = name.trim();
+  
+  // 1. Check uniqueness of the name for this tenant
+  const { data: existing } = await supabaseAdmin
+    .from('agents')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .ilike('name', normalizedName)
+    .single();
+
+  if (existing) {
+    throw new AppError('This agent name already exists, please choose something else.', 'CONFLICT', 409);
+  }
+
   // Scope the fake email to this tenant so the same username can exist
   // across different tenants without colliding in Supabase Auth.
-  const fakeEmail = `${tenantId}_${rawPhone}@agent.tambola.com`;
+  const cleanNameForEmail = normalizedName.replace(/\s+/g, '_').toLowerCase();
+  const fakeEmail = `${tenantId}_${cleanNameForEmail}@agent.tambola.com`;
 
   // ── Step 1: Supabase Auth user ─────────────────────────────────────────────
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: fakeEmail,
     password,
     email_confirm: true, // admin-created — skip OTP
-    user_metadata: { full_name: name, phone: rawPhone },
+    user_metadata: { full_name: normalizedName },
     app_metadata:  { tenant_id: tenantId, role: 'agent' },
   });
 
@@ -51,7 +63,7 @@ const createAgent = async (tenantId, {
     const msg = authError.message ?? '';
     if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('registered')) {
       throw new AppError(
-        `An agent with username '${rawPhone}' already exists`,
+        `This agent name already exists, please choose something else.`,
         'CONFLICT',
         409
       );
@@ -65,10 +77,8 @@ const createAgent = async (tenantId, {
     .insert({
       tenant_id:            tenantId,
       user_id:              authData.user.id,
-      name,
-      phone:                rawPhone,
+      name:                 normalizedName,
       plain_password:       password, // Stored to meet user requirement of visibility
-      commission_per_ticket: commissionPerTicket,
       status:               'active',
       created_by:           createdBy,
     })
@@ -95,6 +105,7 @@ const listAgents = async (tenantId) => {
       .from('agents')
       .select('*')
       .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false }),
 
     supabaseAdmin
@@ -135,7 +146,7 @@ const listAgents = async (tenantId) => {
 const BAN_DURATION_PERMANENT = '876600h'; // 100 years
 
 const updateAgent = async (tenantId, agentId, updates) => {
-  const { name, phone, commissionPerTicket, status } = updates;
+  const { name, status } = updates;
 
   // Ownership check + get user_id for auth operations
   const agent = await _getAgentOrThrow(tenantId, agentId);
@@ -150,8 +161,6 @@ const updateAgent = async (tenantId, agentId, updates) => {
     );
 
     if (banError) {
-      // Non-fatal: log the failure but continue with the DB update.
-      // The agent row will show 'disabled' even if the auth ban partially failed.
       console.error(
         `[Agents] Failed to set ban_duration='${banDuration}' for auth user ${agent.user_id}:`,
         banError.message
@@ -159,31 +168,43 @@ const updateAgent = async (tenantId, agentId, updates) => {
     }
   }
 
-  // ── Sync phone change to Supabase Auth ───────────────────────────────────
-  if (phone !== undefined && phone !== agent.phone && agent.user_id) {
-    const rawPhone = phone.trim();
-    // Scope the fake email to this tenant (must match creation convention)
-    const fakeEmail = `${tenantId}_${rawPhone}@agent.tambola.com`;
-    const { error: phoneError } = await supabaseAdmin.auth.admin.updateUserById(
-      agent.user_id,
-      { email: fakeEmail, email_confirm: true, user_metadata: { phone: rawPhone } }
-    );
+  // ── Sync name change to Supabase Auth ───────────────────────────────────
+  if (name !== undefined && name.trim() !== agent.name) {
+    const normalizedName = name.trim();
+    
+    // Check uniqueness
+    const { data: existing } = await supabaseAdmin
+      .from('agents')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('name', normalizedName)
+      .single();
 
-    if (phoneError) {
-      console.warn(
-        `[Agents] Failed to update email in auth for user ${agent.user_id}:`,
-        phoneError.message
+    if (existing && existing.id !== agentId) {
+      throw new AppError('This agent name already exists, please choose something else.', 'CONFLICT', 409);
+    }
+
+    if (agent.user_id) {
+      const cleanNameForEmail = normalizedName.replace(/\s+/g, '_').toLowerCase();
+      const fakeEmail = `${tenantId}_${cleanNameForEmail}@agent.tambola.com`;
+      const { error: nameError } = await supabaseAdmin.auth.admin.updateUserById(
+        agent.user_id,
+        { email: fakeEmail, email_confirm: true, user_metadata: { full_name: normalizedName } }
       );
-      // Non-fatal — DB row will still update. Note the discrepancy.
+
+      if (nameError) {
+        console.warn(
+          `[Agents] Failed to update email in auth for user ${agent.user_id}:`,
+          nameError.message
+        );
+      }
     }
   }
 
   // ── DB update ────────────────────────────────────────────────────────────
   const dbUpdate = {};
-  if (name                !== undefined) dbUpdate.name                  = name;
-  if (phone               !== undefined) dbUpdate.phone                 = phone;
-  if (commissionPerTicket !== undefined) dbUpdate.commission_per_ticket = commissionPerTicket;
-  if (status              !== undefined) dbUpdate.status                = status;
+  if (name   !== undefined) dbUpdate.name   = name.trim();
+  if (status !== undefined) dbUpdate.status = status;
 
   const { data: updatedAgent, error: updateError } = await supabaseAdmin
     .from('agents')
@@ -269,5 +290,39 @@ const getMyTickets = async (tenantId, userId) => {
   return tickets ?? [];
 };
 
-module.exports = { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets };
+// ─── deleteAllAgents ──────────────────────────────────────────────────────────
+// Soft-deletes all agents for a tenant. Also deletes their Supabase Auth users
+// so their phone numbers can be reused for new agents later.
+const deleteAllAgents = async (tenantId) => {
+  // 1. Fetch all active/non-deleted agents for this tenant
+  const { data: agents, error: fetchError } = await supabaseAdmin
+    .from('agents')
+    .select('id, user_id')
+    .eq('tenant_id', tenantId)
+    .is('deleted_at', null);
+
+  if (fetchError) handleSupabaseError(fetchError, 'Agents');
+  if (!agents || agents.length === 0) return { message: 'No agents to delete.' };
+
+  // 2. Delete Supabase Auth users
+  const authDeletePromises = agents
+    .filter(a => a.user_id)
+    .map(a => supabaseAdmin.auth.admin.deleteUser(a.user_id).catch(err => {
+      console.error(`[Agents] Failed to delete auth user ${a.user_id}:`, err.message);
+    }));
+
+  await Promise.all(authDeletePromises);
+
+  // 3. Soft-delete the agents in the DB
+  const { error: updateError } = await supabaseAdmin
+    .from('agents')
+    .update({ deleted_at: new Date().toISOString() })
+    .in('id', agents.map(a => a.id));
+
+  if (updateError) handleSupabaseError(updateError, 'Agents');
+
+  return { message: `Successfully deleted ${agents.length} agents.` };
+};
+
+module.exports = { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets, deleteAllAgents };
 

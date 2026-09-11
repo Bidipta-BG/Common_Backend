@@ -8,20 +8,20 @@ const { listTickets, listAdminTickets, bookRequest, bookDirect, bookBulk } = req
 
 const bookRequestSchema = z.object({
   playerName:  z.string().min(1, 'playerName is required'),
-  playerPhone: z.string().min(6, 'playerPhone is required'),
+  playerPhone: z.string().min(1, 'playerPhone is required'),
   source:      z.enum(['app', 'whatsapp']).default('app'),
 });
 
 const bookDirectSchema = z.object({
   playerName:  z.string().min(1, 'playerName is required'),
-  playerPhone: z.string().min(6, 'playerPhone is required'),
+  playerPhone: z.string().min(1, 'playerPhone is required'),
 });
 
 const bookBulkSchema = z.object({
   ticketIds:   z.array(z.string().uuid('Each ticketId must be a valid UUID'))
                   .min(1, 'ticketIds must contain at least one ticket'),
   playerName:  z.string().min(1, 'playerName is required'),
-  playerPhone: z.string().min(6, 'playerPhone is required'),
+  playerPhone: z.string().min(1, 'playerPhone is required'),
 });
 
 // ─── Router (mounted at /api/starttambola/tenants in index.js) ────────────────

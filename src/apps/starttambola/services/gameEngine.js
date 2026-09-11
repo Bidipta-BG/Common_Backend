@@ -34,6 +34,7 @@ const { AppError }                     = require('../utils/AppError');
 const { handleSupabaseError }          = require('../utils/supabaseError');
 const { isPatternComplete, getMatchedNumbers } = require('../utils/patternMatcher');
 const { broadcastToGame, broadcastToTenant }  = require('../realtime/broadcaster');
+const { computeSheetWindows }          = require('../utils/sheetWindows');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -63,14 +64,13 @@ const _pickNextNumber = (calledSet) => {
 // Dividend checking (pure in-memory — no DB reads)
 // ─────────────────────────────────────────────────────────────────────────────
 
+const SHEET_BONUS_TYPES = ['half_seat_bonus', 'full_sheet_bonus'];
+
+
 /**
  * Checks every active unwon dividend against every ticket using the latest
  * in-memory called numbers. Inserts winner rows to DB for newly won dividends.
  * Broadcasts each new winner to the game channel.
- *
- * For full_house_1/2/3: the first ticket (lowest ticket_number) to complete
- * full house wins full_house_1. The next wins full_house_2, and so on.
- * Tickets that already won a full_house variant are skipped for subsequent ones.
  *
  * @param {string} gameId
  * @returns {boolean} true if ALL active dividends now have winners
@@ -81,46 +81,94 @@ const _checkDividends = async (gameId) => {
 
   const {
     tenantId, tickets, calledSet, calledNumbers,
-    dividends, wonDividends,
+    dividends, wonDividends, sheetWindows
   } = state;
 
   // Build the set of dividends that still need a winner
   const pendingDividends = dividends.filter((d) => !wonDividends.has(d.id));
   if (pendingDividends.length === 0) return true; // all done
 
-  // Collect ticket IDs that already won ANY dividend (Ticket Retires Rule)
+  // Collect ticket IDs that already won ANY normal dividend (Ticket Retires Rule)
+  // Sheet bonuses do NOT retire tickets.
   const retiredTicketIds = new Set();
   for (const [divId, ticketId] of wonDividends.entries()) {
-    retiredTicketIds.add(ticketId);
+    const div = dividends.find(d => d.id === divId);
+    if (div && !SHEET_BONUS_TYPES.includes(div.pattern_type)) {
+      retiredTicketIds.add(ticketId);
+    }
   }
 
   const newWinnerRows = [];
 
   for (const dividend of pendingDividends) {
-    for (const ticket of tickets) {
-      // TICKET RETIREMENT RULE: If the ticket has already won ANY prize, skip it.
-      if (retiredTicketIds.has(ticket.id)) continue;
+    if (SHEET_BONUS_TYPES.includes(dividend.pattern_type)) {
+      const windows = dividend.pattern_type === 'half_seat_bonus' ? sheetWindows.half : sheetWindows.full;
+      
+      let winningWindowsInThisTick = [];
 
-      if (isPatternComplete(dividend.pattern_type, ticket.grid, calledSet)) {
-        const matchedNumbers = getMatchedNumbers(
-          dividend.pattern_type, ticket.grid, calledSet, calledNumbers
-        );
+      for (const window of windows) {
+        // Check if every ticket in window has >= 2 called numbers
+        let allHaveTwoPlus = true;
+        for (const t of window) {
+          let markedCount = 0;
+          for (const row of t.grid) {
+            for (const cell of row) {
+              if (cell > 0 && calledSet.has(cell)) markedCount++;
+            }
+          }
+          if (markedCount < 2) {
+            allHaveTwoPlus = false;
+            break;
+          }
+        }
 
-        newWinnerRows.push({
-          game_id:         gameId,
-          tenant_id:       tenantId,
-          ticket_id:       ticket.id,
-          dividend_id:     dividend.id,
-          matched_numbers: matchedNumbers,
-        });
+        if (allHaveTwoPlus) {
+          winningWindowsInThisTick.push(window);
+        }
+      }
 
-        // Update in-memory state immediately
-        wonDividends.set(dividend.id, ticket.id);
-        
-        // Retire this ticket immediately so it can't win another dividend in the same tick
-        retiredTicketIds.add(ticket.id);
+      if (winningWindowsInThisTick.length > 0) {
+        for (const window of winningWindowsInThisTick) {
+          const matchedNumbers = window.map(t => t.ticket_number);
+          
+          newWinnerRows.push({
+            game_id:         gameId,
+            tenant_id:       tenantId,
+            ticket_id:       window[0].id,
+            dividend_id:     dividend.id,
+            matched_numbers: matchedNumbers,
+          });
+        }
+        // Mark dividend as won (closed for future ticks)
+        wonDividends.set(dividend.id, winningWindowsInThisTick[0][0].id);
+      }
+    } else {
+      // Normal per-ticket pattern
+      for (const ticket of tickets) {
+        // TICKET RETIREMENT RULE: If the ticket has already won ANY prize, skip it.
+        if (retiredTicketIds.has(ticket.id)) continue;
 
-        break; // first ticket (by ticket_number ascending) wins this dividend
+        if (isPatternComplete(dividend.pattern_type, ticket.grid, calledSet)) {
+          const matchedNumbers = getMatchedNumbers(
+            dividend.pattern_type, ticket.grid, calledSet, calledNumbers
+          );
+
+          newWinnerRows.push({
+            game_id:         gameId,
+            tenant_id:       tenantId,
+            ticket_id:       ticket.id,
+            dividend_id:     dividend.id,
+            matched_numbers: matchedNumbers,
+          });
+
+          // Update in-memory state immediately
+          wonDividends.set(dividend.id, ticket.id);
+          
+          // Retire this ticket immediately so it can't win another dividend in the same tick
+          retiredTicketIds.add(ticket.id);
+
+          break; // first ticket (by ticket_number ascending) wins this dividend
+        }
       }
     }
   }
@@ -283,8 +331,8 @@ const _startCentralLoop = () => {
     // if (_loopDebugCounter % 20 === 0) { ... removed for log hygiene ... }
 
     for (const [gameId, state] of _gameState.entries()) {
-      // Skip if: already processing, or not yet due
-      if (state.processing || now < state.nextCallDue.getTime()) continue;
+      // Skip if: already processing, paused, or not yet due
+      if (state.processing || state.paused || now < state.nextCallDue.getTime()) continue;
 
       // Claim the tick immediately to prevent double-processing
       state.processing = true;
@@ -360,16 +408,20 @@ const _loadGameIntoMemory = async (game, existingCalledNumbers = [], lastCalledA
   const baseTime   = lastCalledAt ? lastCalledAt.getTime() : Date.now();
   const nextCallDue = new Date(baseTime + intervalMs);
 
+  const sheetWindows = computeSheetWindows(tickets ?? []);
+
   _gameState.set(gameId, {
     tenantId,
     intervalMs,
     nextCallDue,
     processing:    false,
+    paused:        false,
     tickets:       tickets ?? [],
     calledNumbers: existingCalledNumbers,
     calledSet:     new Set(existingCalledNumbers),
     dividends:     dividends ?? [],
     wonDividends,
+    sheetWindows,
   });
 };
 
@@ -469,6 +521,34 @@ const stopGame = async (tenantId, gameId) => {
   return { gameId, status: 'completed' };
 };
 
+const pauseGame = async (tenantId, gameId) => {
+  const state = _gameState.get(gameId);
+  if (!state) throw new AppError('Game is not running on this server.', 'BAD_REQUEST', 400);
+  if (state.paused) throw new AppError('Game is already paused.', 'BAD_REQUEST', 400);
+  state.paused = true;
+  return { gameId, paused: true };
+};
+
+const resumeGame = async (tenantId, gameId) => {
+  const state = _gameState.get(gameId);
+  if (!state) throw new AppError('Game is not running on this server.', 'BAD_REQUEST', 400);
+  if (!state.paused) throw new AppError('Game is not paused.', 'BAD_REQUEST', 400);
+  state.paused = false;
+  state.nextCallDue = new Date(Date.now()); // call next number immediately
+  return { gameId, paused: false };
+};
+
+const updateGameInterval = async (tenantId, gameId, newIntervalSeconds) => {
+  const state = _gameState.get(gameId);
+  if (!state) throw new AppError('Game is not running on this server.', 'BAD_REQUEST', 400);
+  state.intervalMs = newIntervalSeconds * 1000;
+  // If running (not paused), reset nextCallDue so new interval takes effect now
+  if (!state.paused) {
+    state.nextCallDue = new Date(Date.now() + state.intervalMs);
+  }
+  return { gameId, intervalSeconds: newIntervalSeconds };
+};
+
 /**
  * Public state snapshot — for a client that just loaded the page and needs
  * to catch up before subscribing to the live Realtime channel.
@@ -523,6 +603,7 @@ const getGameState = async (tenantId, gameId) => {
     calledNumbers,
     winners:       winners ?? [],
     isInMemory:    !!memState, // helpful for debugging
+    isPaused:      memState?.paused ?? false,
   };
 };
 
@@ -530,7 +611,7 @@ const getGameState = async (tenantId, gameId) => {
  * Resume hook — called once on server boot by resumeRunningGames.js.
  * Rehydrates _gameState for each game whose status = 'running' in DB.
  */
-const resumeGame = async (game, calledRows) => {
+const resumeGameFromDB = async (game, calledRows) => {
   const calledNumbers = calledRows.map((r) => r.number);
   const lastRow       = calledRows.length > 0 ? calledRows[calledRows.length - 1] : null;
   const lastCalledAt  = lastRow ? new Date(lastRow.created_at) : null;
@@ -545,4 +626,43 @@ const resumeGame = async (game, calledRows) => {
   );
 };
 
-module.exports = { startGame, stopGame, completeGame, getGameState, resumeGame };
+// ─────────────────────────────────────────────────────────────────────────────
+// resetCallNumbers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reset Call Button - Wipes called numbers, winners, and sets game status back to scheduled.
+ * Removes game from memory to stop engine tick.
+ */
+const resetCallNumbers = async (tenantId, gameId) => {
+  // 1. Stop engine tick immediately
+  _gameState.delete(gameId);
+  
+  // 2. Wipe DB records
+  const { error: calledError } = await supabaseAdmin
+    .from('called_numbers')
+    .delete()
+    .eq('game_id', gameId);
+    
+  if (calledError) handleSupabaseError(calledError, 'Delete CalledNumbers');
+  
+  const { error: winnersError } = await supabaseAdmin
+    .from('winners')
+    .delete()
+    .eq('game_id', gameId);
+    
+  if (winnersError) handleSupabaseError(winnersError, 'Delete Winners');
+  
+  // 3. Update game status
+  const { error: gameError } = await supabaseAdmin
+    .from('games')
+    .update({ status: 'scheduled', started_at: null })
+    .eq('id', gameId)
+    .eq('tenant_id', tenantId);
+    
+  if (gameError) handleSupabaseError(gameError, 'Update Game to scheduled');
+  
+  console.log(`[GameEngine] Reset call for game ${gameId} complete.`);
+};
+
+module.exports = { startGame, stopGame, completeGame, getGameState, resumeGameFromDB, pauseGame, resumeGame, updateGameInterval, resetCallNumbers };

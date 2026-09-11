@@ -244,7 +244,7 @@ const createTenant = async ({
 const getTenantByDomain = async (domain) => {
   const { data, error } = await supabaseAdmin
     .from('tenants')
-    .select('id, business_name, domain, status, theme_id, theme_overrides, organizer_whatsapp_number, organizer_whatsapp_group_link, is_bumper_game')
+    .select('id, business_name, domain, status, theme_id, theme_overrides, organizer_whatsapp_number, organizer_whatsapp_group_link, is_bumper_game, website_status, announcement_text, owner_name, owner_email, owner_phone, recovery_email, telegram_link, whatsapp_active, telegram_active')
     .eq('domain', domain)
     .single();
 
@@ -260,6 +260,15 @@ const getTenantByDomain = async (domain) => {
     whatsappNumber:  data.organizer_whatsapp_number ?? null,
     whatsappGroupLink: data.organizer_whatsapp_group_link ?? null,
     is_bumper_game:  data.is_bumper_game ?? false,
+    websiteStatus:   data.website_status ?? 'open',
+    announcementText: data.announcement_text ?? null,
+    ownerName:       data.owner_name ?? null,
+    ownerEmail:      data.owner_email ?? null,
+    ownerPhone:      data.owner_phone ?? null,
+    recoveryEmail:   data.recovery_email ?? null,
+    telegramLink:    data.telegram_link ?? null,
+    whatsappActive:  data.whatsapp_active ?? true,
+    telegramActive:  data.telegram_active ?? false,
   };
 };
 
@@ -283,6 +292,15 @@ const getTenantById = async (tenantId) => {
       organizer_whatsapp_number,
       organizer_whatsapp_group_link,
       is_bumper_game,
+      website_status,
+      announcement_text,
+      owner_name,
+      owner_email,
+      owner_phone,
+      recovery_email,
+      telegram_link,
+      whatsapp_active,
+      telegram_active,
       themes (
         id,
         name,
@@ -305,6 +323,15 @@ const getTenantById = async (tenantId) => {
     whatsappNumber:  data.organizer_whatsapp_number ?? null,
     whatsappGroupLink: data.organizer_whatsapp_group_link ?? null,
     is_bumper_game:  data.is_bumper_game ?? false,
+    websiteStatus:   data.website_status ?? 'open',
+    announcementText: data.announcement_text ?? null,
+    ownerName:       data.owner_name ?? null,
+    ownerEmail:      data.owner_email ?? null,
+    ownerPhone:      data.owner_phone ?? null,
+    recoveryEmail:   data.recovery_email ?? null,
+    telegramLink:    data.telegram_link ?? null,
+    whatsappActive:  data.whatsapp_active ?? true,
+    telegramActive:  data.telegram_active ?? false,
     theme:           data.themes ?? null,   // full theme row if a theme is selected
   };
 };
@@ -312,7 +339,7 @@ const getTenantById = async (tenantId) => {
 // ─── updateTenant ──────────────────────────────────────────────────────────────
 // Protected endpoint logic to update tenant details (like WhatsApp number or Theme ID)
 const updateTenant = async (tenantId, updates) => {
-  const allowedFields = ['theme_id', 'organizer_whatsapp_number', 'organizer_whatsapp_group_link'];
+  const allowedFields = ['theme_id', 'organizer_whatsapp_number', 'organizer_whatsapp_group_link', 'website_status', 'announcement_text', 'owner_name', 'owner_phone', 'recovery_email', 'telegram_link', 'whatsapp_active', 'telegram_active'];
   const updateData = {};
 
   for (const [key, value] of Object.entries(updates)) {

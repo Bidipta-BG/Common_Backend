@@ -34,6 +34,16 @@ const resetTickets = async (req, res, next) => {
   }
 };
 
+// ─── POST /tenants/:tenantId/games/:gameId/shuffle-tickets ───────────────────
+const shuffleTickets = async (req, res, next) => {
+  try {
+    const result = await gamesService.shuffleTickets(req.params.tenantId, req.params.gameId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // ─── POST /tenants/:tenantId/games/:gameId/reset-game ────────────────────────
 const resetGame = async (req, res, next) => {
   try {
@@ -101,16 +111,61 @@ const getGamesList = async (req, res, next) => {
   }
 };
 
+// ─── GET /tenants/:tenantId/games/current-winners ─────────────────────────────
+const getCurrentWinners = async (req, res, next) => {
+  try {
+    const result = await gamesService.getCurrentWinners(req.params.tenantId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── GET /tenants/:tenantId/games/ticket-history ──────────────────────────────
+const getTicketHistory = async (req, res, next) => {
+  try {
+    const result = await gamesService.getTicketHistory(req.params.tenantId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── GET /tenants/:tenantId/games/winner-history ──────────────────────────────
+const getWinnerHistory = async (req, res, next) => {
+  try {
+    const result = await gamesService.getWinnerHistory(req.params.tenantId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── GET /tenants/:tenantId/games/:gameId/business-summary ────────────────────
+const getGameBusinessSummary = async (req, res, next) => {
+  try {
+    const result = await gamesService.getGameBusinessSummary(req.params.tenantId, req.params.gameId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   createGame,
   updateGame,
   resetTickets,
+  shuffleTickets,
   resetGame,
   deleteGame,
   upsertDividends,
   getGame,
   getCurrentGame,
   getGamesList,
+  getCurrentWinners,
+  getTicketHistory,
+  getWinnerHistory,
+  getGameBusinessSummary,
 };
 
 

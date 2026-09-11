@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { validateBody } = require('../utils/validateBody');
 const { requireAuth, requireRole, requireTenantMatch } = require('../middleware/auth');
-const { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets } = require('../controllers/agents.controller');
+const { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets, deleteAllAgents } = require('../controllers/agents.controller');
 
 // ─── Shared auth guards ────────────────────────────────────────────────────────
 const adminAuth = [requireAuth, requireRole('tenant_admin'), requireTenantMatch];
@@ -10,23 +10,14 @@ const agentAuth = [requireAuth, requireRole('agent'),        requireTenantMatch]
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
-const loginIdentifier = z
-  .string()
-  .min(3, 'Username must be at least 3 characters long');
-
 const createAgentSchema = z.object({
-  name:                 z.string().min(1, 'name is required'),
-  phone:                loginIdentifier,
-  password:             z.string().min(6, 'password must be at least 6 characters'),
-  commissionPerTicket:  z.number({ required_error: 'commissionPerTicket is required' })
-                          .nonnegative('commissionPerTicket must be ≥ 0'),
+  name:     z.string().min(1, 'Agent Name is required'),
+  password: z.string().min(6, 'password must be at least 6 characters'),
 });
 
 const updateAgentSchema = z.object({
-  name:                z.string().min(1).optional(),
-  phone:               loginIdentifier.optional(),
-  commissionPerTicket: z.number().nonnegative().optional(),
-  status:              z.enum(['active', 'disabled']).optional(),
+  name:   z.string().min(1).optional(),
+  status: z.enum(['active', 'disabled']).optional(),
 }).refine(
   (obj) => Object.keys(obj).length > 0,
   { message: 'At least one field must be provided for update' }
@@ -56,6 +47,9 @@ router.post('/:tenantId/agents', ...adminAuth, validateBody(createAgentSchema), 
 
 // GET  /tenants/:tenantId/agents  (tenant_admin)
 router.get('/:tenantId/agents', ...adminAuth, listAgents);
+
+// DELETE /tenants/:tenantId/agents (tenant_admin)
+router.delete('/:tenantId/agents', ...adminAuth, deleteAllAgents);
 
 // PATCH /tenants/:tenantId/agents/:agentId  (tenant_admin)
 // Registered AFTER /me/performance — safe since path depths differ anyway.

@@ -2,6 +2,7 @@ const { supabaseAdmin } = require('../config/supabaseClient');
 const { AppError } = require('../utils/AppError');
 const { handleSupabaseError } = require('../utils/supabaseError');
 const { generateTambolaTicket } = require('../utils/ticketGenerator');
+const { computeSheetWindows } = require('../utils/sheetWindows');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 // Supabase's PostgREST has a default row limit; chunk large inserts to stay safe.
@@ -84,15 +85,20 @@ const createGame = async (tenantId, {
   // 3. Create default dividends
   const totalPool = totalTickets * ticketPrice;
   const defaultDividends = [
-    { name: "Full House 1", pattern_type: "full_house_1", active: true, prize_amount: Math.floor(totalPool * 0.50), sort_order: 0 },
-    { name: "Full House 2", pattern_type: "full_house_2", active: true, prize_amount: Math.floor(totalPool * 0.30), sort_order: 1 },
-    { name: "Full House 3", pattern_type: "full_house_3", active: false, prize_amount: 0, sort_order: 2 },
-    { name: "Top Line", pattern_type: "top_line", active: false, prize_amount: 0, sort_order: 3 },
-    { name: "Middle Line", pattern_type: "middle_line", active: false, prize_amount: 0, sort_order: 4 },
-    { name: "Bottom Line", pattern_type: "bottom_line", active: true, prize_amount: Math.floor(totalPool * 0.20), sort_order: 5 },
-    { name: "Quick 5 (Early 5)", pattern_type: "quick_five", active: false, prize_amount: 0, sort_order: 6 },
-    { name: "Corners", pattern_type: "corners", active: false, prize_amount: 0, sort_order: 7 },
-    { name: "Half Seat Bonus", pattern_type: "half_seat_bonus", active: false, prize_amount: 0, sort_order: 8 },
+    { name: "Full House 1",          pattern_type: "full_house_1",    active: true,  prize_amount: Math.floor(totalPool * 0.50), sort_order: 0  },
+    { name: "Full House 2",          pattern_type: "full_house_2",    active: true,  prize_amount: Math.floor(totalPool * 0.30), sort_order: 1  },
+    { name: "Full House 3",          pattern_type: "full_house_3",    active: false, prize_amount: 0,                            sort_order: 2  },
+    { name: "Top Line",              pattern_type: "top_line",        active: false, prize_amount: 0,                            sort_order: 3  },
+    { name: "Middle Line",           pattern_type: "middle_line",     active: false, prize_amount: 0,                            sort_order: 4  },
+    { name: "Bottom Line",           pattern_type: "bottom_line",     active: true,  prize_amount: Math.floor(totalPool * 0.20), sort_order: 5  },
+    { name: "Early Five",            pattern_type: "quick_five",      active: false, prize_amount: 0,                            sort_order: 6  },
+    { name: "Quick Six",             pattern_type: "quick_six",       active: false, prize_amount: 0,                            sort_order: 7  },
+    { name: "Quick Seven",           pattern_type: "quick_seven",     active: false, prize_amount: 0,                            sort_order: 8  },
+    { name: "Corners",               pattern_type: "corners",         active: false, prize_amount: 0,                            sort_order: 9  },
+    { name: "Star",                  pattern_type: "star",            active: false, prize_amount: 0,                            sort_order: 10 },
+    { name: "Box Bonus",             pattern_type: "box_bonus",       active: false, prize_amount: 0,                            sort_order: 11 },
+    { name: "Half Sheet Bonus",      pattern_type: "half_seat_bonus", active: false, prize_amount: 0,                            sort_order: 12 },
+    { name: "Full Sheet Bonus",      pattern_type: "full_sheet_bonus",active: false, prize_amount: 0,                            sort_order: 13 },
   ].map(d => ({ ...d, tenant_id: tenantId, game_id: game.id }));
 
   const { error: divError } = await supabaseAdmin.from('dividends').insert(defaultDividends);
@@ -190,7 +196,7 @@ const resetTickets = async (tenantId, gameId) => {
   // Ownership check
   await _getGameOrThrow(tenantId, gameId);
 
-  // Reset all tickets for this game
+  // Reset all tickets for this game (unbook but keep numbers)
   const { error: ticketError } = await supabaseAdmin
     .from('tickets')
     .update({
@@ -204,16 +210,45 @@ const resetTickets = async (tenantId, gameId) => {
 
   if (ticketError) handleSupabaseError(ticketError, 'Tickets');
 
-  // Delete pending and approved booking requests for this game
+  // Delete all booking requests for this game
   const { error: brError } = await supabaseAdmin
     .from('booking_requests')
     .delete()
-    .eq('game_id', gameId)
-    .in('status', ['pending', 'approved']);
+    .eq('game_id', gameId);
 
   if (brError) handleSupabaseError(brError, 'BookingRequests');
 
-  return { message: 'All tickets reset to available.' };
+  return { message: 'All bookings cleared, tickets are available again.' };
+};
+
+// ─── shuffleTickets ─────────────────────────────────────────────────────────────
+// Deletes all tickets and regenerates a fresh set of numbers. Also deletes bookings.
+
+const shuffleTickets = async (tenantId, gameId) => {
+  // Ownership check
+  const game = await _getGameOrThrow(tenantId, gameId);
+
+  // Delete all booking requests for this game
+  const { error: brError } = await supabaseAdmin
+    .from('booking_requests')
+    .delete()
+    .eq('game_id', gameId);
+
+  if (brError) handleSupabaseError(brError, 'BookingRequests');
+
+  // Delete all existing tickets
+  const { error: ticketDeleteError } = await supabaseAdmin
+    .from('tickets')
+    .delete()
+    .eq('game_id', gameId);
+
+  if (ticketDeleteError) handleSupabaseError(ticketDeleteError, 'Tickets');
+
+  // Generate fresh tickets
+  const newRows = _buildTicketRows(tenantId, gameId, game.total_tickets, 1);
+  await _insertTicketChunks(newRows);
+
+  return { message: 'All tickets shuffled and bookings cleared.' };
 };
 
 // ─── resetGame ────────────────────────────────────────────────────────────────
@@ -362,7 +397,7 @@ const getCurrentGame = async (tenantId) => {
   // 1. Try running first
   const { data: running } = await supabaseAdmin
     .from('games')
-    .select('id, status, booking_status, scheduled_at, started_at, total_tickets, ticket_price, call_interval_seconds')
+    .select('id, status, booking_status, scheduled_at, started_at, total_tickets, ticket_price, call_interval_seconds, agency_commission')
     .eq('tenant_id', tenantId)
     .eq('status', 'running')
     .maybeSingle();
@@ -372,7 +407,7 @@ const getCurrentGame = async (tenantId) => {
   // 2. Try upcoming (scheduled) WHERE booking_status is 'open'
   const { data: upcomingOpen } = await supabaseAdmin
     .from('games')
-    .select('id, status, booking_status, scheduled_at, started_at, total_tickets, ticket_price, call_interval_seconds')
+    .select('id, status, booking_status, scheduled_at, started_at, total_tickets, ticket_price, call_interval_seconds, agency_commission')
     .eq('tenant_id', tenantId)
     .eq('status', 'scheduled')
     .eq('booking_status', 'open')
@@ -385,7 +420,7 @@ const getCurrentGame = async (tenantId) => {
   // 3. Fallback to any scheduled game
   const { data: upcoming } = await supabaseAdmin
     .from('games')
-    .select('id, status, booking_status, scheduled_at, started_at, total_tickets, ticket_price, call_interval_seconds')
+    .select('id, status, booking_status, scheduled_at, started_at, total_tickets, ticket_price, call_interval_seconds, agency_commission')
     .eq('tenant_id', tenantId)
     .eq('status', 'scheduled')
     .order('scheduled_at', { ascending: true })
@@ -397,7 +432,7 @@ const getCurrentGame = async (tenantId) => {
   // Fallback — most recently completed game
   const { data: completed } = await supabaseAdmin
     .from('games')
-    .select('id, status, booking_status, scheduled_at, started_at, completed_at, total_tickets, ticket_price, call_interval_seconds')
+    .select('id, status, booking_status, scheduled_at, started_at, completed_at, total_tickets, ticket_price, call_interval_seconds, agency_commission')
     .eq('tenant_id', tenantId)
     .eq('status', 'completed')
     .order('completed_at', { ascending: false })
@@ -451,16 +486,198 @@ const getGamesList = async (tenantId) => {
   }));
 };
 
+// ─── getCurrentWinners ────────────────────────────────────────────────────────
+const getCurrentWinners = async (tenantId) => {
+  const { data: game, error: gameError } = await supabaseAdmin
+    .from('games')
+    .select('id, scheduled_at, completed_at')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (gameError) handleSupabaseError(gameError, 'Game');
+  if (!game) return { game: null, winners: [] };
+
+  const { data: winners, error: winnersError } = await supabaseAdmin
+    .from('winners')
+    .select('id, declared_at, dividends(name, prize_amount, pattern_type), tickets(ticket_number, player_name, player_phone, booked_via, agents(name))')
+    .eq('game_id', game.id);
+
+  if (winnersError) handleSupabaseError(winnersError, 'Winners');
+
+  const mappedWinners = (winners || []).map(w => ({
+    id: w.id,
+    prize_name: w.dividends?.name,
+    prize_amount: w.dividends?.prize_amount,
+    ticket_number: w.tickets?.ticket_number,
+    player_name: w.tickets?.player_name,
+    player_phone: w.tickets?.player_phone,
+    booked_via: w.tickets?.booked_via,
+    agent_name: w.tickets?.agents?.name || null,
+    declared_at: w.declared_at
+  }));
+
+  return { game, winners: mappedWinners };
+};
+
+// ─── getTicketHistory ─────────────────────────────────────────────────────────
+const getTicketHistory = async (tenantId) => {
+  const { data: games, error: gamesError } = await supabaseAdmin
+    .from('games')
+    .select('id, status, scheduled_at, completed_at, total_tickets, ticket_price')
+    .eq('tenant_id', tenantId)
+    .order('scheduled_at', { ascending: false });
+
+  if (gamesError) handleSupabaseError(gamesError, 'Games');
+  if (!games || games.length === 0) return [];
+
+  const gameIds = games.map(g => g.id);
+  const { data: tickets, error: ticketsError } = await supabaseAdmin
+    .from('tickets')
+    .select('game_id, ticket_number, player_name, player_phone, booked_via, agents(name)')
+    .in('game_id', gameIds)
+    .eq('status', 'booked')
+    .order('ticket_number', { ascending: true });
+
+  if (ticketsError) handleSupabaseError(ticketsError, 'Tickets');
+
+  const ticketsByGame = (tickets || []).reduce((acc, t) => {
+    if (!acc[t.game_id]) acc[t.game_id] = [];
+    acc[t.game_id].push({
+      ticket_number: t.ticket_number,
+      player_name: t.player_name,
+      player_phone: t.player_phone,
+      booked_via: t.booked_via,
+      agent_name: t.agents?.name || null
+    });
+    return acc;
+  }, {});
+
+  return games.map(g => ({
+    ...g,
+    booked_count: (ticketsByGame[g.id] || []).length,
+    tickets: ticketsByGame[g.id] || []
+  }));
+};
+
+// ─── getWinnerHistory ─────────────────────────────────────────────────────────
+const getWinnerHistory = async (tenantId) => {
+  const { data: games, error: gamesError } = await supabaseAdmin
+    .from('games')
+    .select('id, scheduled_at, completed_at, total_tickets, ticket_price')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false });
+
+  if (gamesError) handleSupabaseError(gamesError, 'Games');
+  if (!games || games.length === 0) return [];
+
+  const gameIds = games.map(g => g.id);
+  const { data: winners, error: winnersError } = await supabaseAdmin
+    .from('winners')
+    .select('game_id, ticket_id, dividends(name, pattern_type), tickets(ticket_number)')
+    .in('game_id', gameIds);
+
+  if (winnersError) handleSupabaseError(winnersError, 'Winners');
+
+  const winnersByGame = (winners || []).reduce((acc, w) => {
+    if (!acc[w.game_id]) acc[w.game_id] = [];
+    acc[w.game_id].push(w);
+    return acc;
+  }, {});
+
+  return games.map(g => {
+    const gameWinners = winnersByGame[g.id] || [];
+    
+    // Group by dividend name
+    const groupedByDividend = gameWinners.reduce((acc, w) => {
+      const divName = w.dividends?.name || 'Unknown Prize';
+      if (!acc[divName]) acc[divName] = [];
+      if (w.tickets?.ticket_number) {
+        acc[divName].push(w.tickets.ticket_number);
+      }
+      return acc;
+    }, {});
+    
+    const prizeGroups = Object.keys(groupedByDividend).map(divName => ({
+      dividend_name: divName,
+      ticket_numbers: groupedByDividend[divName].sort((a, b) => a - b)
+    }));
+
+    return {
+      ...g,
+      winnerCount: gameWinners.length,
+      prize_groups: prizeGroups
+    };
+  });
+};
+
+// ─── getGameBusinessSummary ───────────────────────────────────────────────────
+const getGameBusinessSummary = async (tenantId, gameId) => {
+  const game = await _getGameOrThrow(tenantId, gameId);
+
+  // Fetch booked tickets for this game
+  const { data: bookedTickets, error: ticketsError } = await supabaseAdmin
+    .from('tickets')
+    .select('ticket_number')
+    .eq('game_id', gameId)
+    .eq('status', 'booked')
+    .order('ticket_number', { ascending: true });
+
+  if (ticketsError) handleSupabaseError(ticketsError, 'Tickets');
+  
+  // Fetch active dividends for this game
+  const { data: dividends, error: dividendsError } = await supabaseAdmin
+    .from('dividends')
+    .select('prize_amount')
+    .eq('game_id', gameId)
+    .eq('active', true);
+
+  if (dividendsError) handleSupabaseError(dividendsError, 'Dividends');
+
+  const { fullCount, halfCount } = computeSheetWindows(bookedTickets || []);
+  
+  const sold_tickets = (bookedTickets || []).length;
+  const tickets_left = game.total_tickets - sold_tickets;
+  const total_revenue = sold_tickets * game.ticket_price;
+  
+  const total_prize_money = (dividends || []).reduce((sum, d) => sum + Number(d.prize_amount || 0), 0);
+  const total_agent_commission = sold_tickets * (game.agency_commission || 0);
+  
+  const total_profit = total_revenue - total_prize_money - total_agent_commission;
+
+  return {
+    total_tickets: game.total_tickets,
+    sold_tickets,
+    half_sheets_booked: halfCount,
+    full_sheets_booked: fullCount,
+    tickets_left,
+    ticket_price: game.ticket_price,
+    commission_per_ticket: game.agency_commission || 0,
+    total_revenue,
+    total_prize_money,
+    total_agent_commission,
+    total_profit
+  };
+};
+
 module.exports = {
   createGame,
   updateGame,
   resetTickets,
+  shuffleTickets,
   resetGame,
   deleteGame,
   upsertDividends,
   getGame,
   getCurrentGame,
   getGamesList,
+  getCurrentWinners,
+  getTicketHistory,
+  getWinnerHistory,
+  getGameBusinessSummary,
 };
 
 

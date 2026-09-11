@@ -1,5 +1,5 @@
 const { supabaseAdmin } = require('../config/supabaseClient');
-const { resumeGame }    = require('../services/gameEngine');
+const { resumeGameFromDB }    = require('../services/gameEngine');
 
 // ─── resumeRunningGames ───────────────────────────────────────────────────────
 // Called ONCE during server boot, AFTER the central game engine tick loop
@@ -58,7 +58,7 @@ const resumeRunningGames = async () => {
         continue;
       }
 
-      await resumeGame(game, calledRows ?? []);
+      await resumeGameFromDB(game, calledRows ?? []);
     } catch (err) {
       console.error(`[ResumeGames] Failed to resume game ${game.id}:`, err.message);
       // Continue with other games — one bad resume shouldn't block the rest

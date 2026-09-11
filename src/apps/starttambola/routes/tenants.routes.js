@@ -66,6 +66,14 @@ const updateTenantSchema = z.object({
   theme_id: z.string().uuid().optional().nullable(),
   organizer_whatsapp_number: z.string().optional().nullable(),
   organizer_whatsapp_group_link: z.string().optional().nullable(),
+  website_status: z.enum(['open', 'closed']).optional(),
+  announcement_text: z.string().optional().nullable(),
+  owner_name: z.string().min(1).optional(),
+  owner_phone: z.string().min(6).optional(),
+  recovery_email: z.string().email().optional().nullable(),
+  telegram_link: z.string().optional().nullable(),
+  whatsapp_active: z.boolean().optional(),
+  telegram_active: z.boolean().optional(),
 });
 
 publicRouter.patch(

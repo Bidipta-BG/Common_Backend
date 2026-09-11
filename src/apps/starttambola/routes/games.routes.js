@@ -7,11 +7,16 @@ const {
   createGame,
   updateGame,
   resetTickets,
+  shuffleTickets,
   resetGame,
   deleteGame,
   upsertDividends,
   getGame,
   getGamesList,
+  getCurrentWinners,
+  getTicketHistory,
+  getWinnerHistory,
+  getGameBusinessSummary,
 } = require('../controllers/games.controller');
 
 // ─── Shared auth guard ────────────────────────────────────────────────────────
@@ -85,6 +90,9 @@ router.patch(
 // POST   /tenants/:tenantId/games/:gameId/reset-tickets
 router.post('/:tenantId/games/:gameId/reset-tickets', ...gameAuth, resetTickets);
 
+// POST   /tenants/:tenantId/games/:gameId/shuffle-tickets
+router.post('/:tenantId/games/:gameId/shuffle-tickets', ...gameAuth, shuffleTickets);
+
 // POST   /tenants/:tenantId/games/:gameId/reset-game
 router.post('/:tenantId/games/:gameId/reset-game', ...gameAuth, resetGame);
 
@@ -106,7 +114,19 @@ router.get(
   getGamesList
 );
 
+// GET    /tenants/:tenantId/games/current-winners
+router.get('/:tenantId/games/current-winners', ...gameAuth, getCurrentWinners);
+
+// GET    /tenants/:tenantId/games/ticket-history
+router.get('/:tenantId/games/ticket-history', ...gameAuth, getTicketHistory);
+
+// GET    /tenants/:tenantId/games/winner-history
+router.get('/:tenantId/games/winner-history', ...gameAuth, getWinnerHistory);
+
 // GET    /tenants/:tenantId/games/:gameId
 router.get('/:tenantId/games/:gameId', ...gameAuth, getGame);
+
+// GET    /tenants/:tenantId/games/:gameId/business-summary
+router.get('/:tenantId/games/:gameId/business-summary', ...gameAuth, getGameBusinessSummary);
 
 module.exports = router;

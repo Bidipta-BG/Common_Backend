@@ -66,5 +66,13 @@ const getMyTickets = async (req, res, next) => {
   }
 };
 
-module.exports = { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets };
+const deleteAllAgents = async (req, res, next) => {
+  try {
+    const result = await agentsService.deleteAllAgents(req.params.tenantId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
 
+module.exports = { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets, deleteAllAgents };
