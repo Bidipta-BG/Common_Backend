@@ -20,11 +20,13 @@ const verifyPassword = (password, hash) => {
 };
 
 const createReferrer = async ({ name, email, mobile, password }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
   // Check if email already exists
   const { data: existing } = await supabaseAdmin
     .from('referrers')
     .select('id')
-    .eq('email', email)
+    .eq('email', normalizedEmail)
     .maybeSingle();
 
   if (existing) {
@@ -62,7 +64,7 @@ const createReferrer = async ({ name, email, mobile, password }) => {
     .from('referrers')
     .insert({
       name,
-      email,
+      email: normalizedEmail,
       mobile,
       password_hash: passwordHash,
       referral_code: code,
@@ -82,10 +84,12 @@ const createReferrer = async ({ name, email, mobile, password }) => {
 };
 
 const authenticateReferrer = async ({ email, password }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
   const { data: referrer, error } = await supabaseAdmin
     .from('referrers')
     .select('*')
-    .eq('email', email)
+    .eq('email', normalizedEmail)
     .maybeSingle();
 
   if (error) {
