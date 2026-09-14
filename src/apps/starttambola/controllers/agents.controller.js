@@ -38,6 +38,20 @@ const updateAgent = async (req, res, next) => {
   }
 };
 
+// ─── PATCH /tenants/:tenantId/agents/me ───────────────────────────────────────
+const updateMyAgent = async (req, res, next) => {
+  try {
+    const agent = await agentsService.updateMyAgent(
+      req.params.tenantId,
+      req.auth.userId,
+      req.body
+    );
+    return res.status(200).json({ data: agent });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // ─── GET /tenants/:tenantId/agents/me/performance ─────────────────────────────
 // Agent-only. Returns from agent_performance_self — never admin view.
 const getMyPerformance = async (req, res, next) => {
@@ -66,6 +80,15 @@ const getMyTickets = async (req, res, next) => {
   }
 };
 
+const deleteAgent = async (req, res, next) => {
+  try {
+    const result = await agentsService.deleteAgent(req.params.tenantId, req.params.agentId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 const deleteAllAgents = async (req, res, next) => {
   try {
     const result = await agentsService.deleteAllAgents(req.params.tenantId);
@@ -75,4 +98,4 @@ const deleteAllAgents = async (req, res, next) => {
   }
 };
 
-module.exports = { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets, deleteAllAgents };
+module.exports = { createAgent, listAgents, updateAgent, updateMyAgent, getMyPerformance, getMyTickets, deleteAgent, deleteAllAgents };

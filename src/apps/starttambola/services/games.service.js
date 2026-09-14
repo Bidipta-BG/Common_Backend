@@ -663,6 +663,61 @@ const getGameBusinessSummary = async (tenantId, gameId) => {
   };
 };
 
+// ─── loadBackupTickets ────────────────────────────────────────────────────────
+const loadBackupTickets = async (tenantId, targetGameId, sourceGameId) => {
+  // 1. Verify ownership of both games
+  const targetGame = await _getGameOrThrow(tenantId, targetGameId);
+  const sourceGame = await _getGameOrThrow(tenantId, sourceGameId);
+
+  // 2. Fetch ALL tickets from source game
+  const { data: sourceTickets, error: sourceTicketsError } = await supabaseAdmin
+    .from('tickets')
+    .select('ticket_number, grid, status, player_name, player_phone, booked_via, agent_id')
+    .eq('game_id', sourceGameId);
+
+  if (sourceTicketsError) handleSupabaseError(sourceTicketsError, 'SourceTickets');
+  if (!sourceTickets || sourceTickets.length === 0) {
+    throw new AppError('The selected backup game has no tickets.', 'BAD_REQUEST', 400);
+  }
+
+  // 3. Delete existing booking_requests for target game
+  const { error: delReqError } = await supabaseAdmin
+    .from('booking_requests')
+    .delete()
+    .eq('game_id', targetGameId);
+  
+  if (delReqError) handleSupabaseError(delReqError, 'BookingRequests');
+
+  // 4. Delete existing tickets for target game
+  const { error: delTicketsError } = await supabaseAdmin
+    .from('tickets')
+    .delete()
+    .eq('game_id', targetGameId);
+
+  if (delTicketsError) handleSupabaseError(delTicketsError, 'TargetTickets');
+
+  // 5. Update target game's total_tickets to match backup
+  if (targetGame.total_tickets !== sourceTickets.length) {
+    const { error: updateGameError } = await supabaseAdmin
+      .from('games')
+      .update({ total_tickets: sourceTickets.length })
+      .eq('id', targetGameId);
+    
+    if (updateGameError) handleSupabaseError(updateGameError, 'UpdateGame');
+  }
+
+  // 6. Insert cloned tickets
+  const newTicketRows = sourceTickets.map(t => ({
+    ...t,
+    game_id: targetGameId,
+    tenant_id: tenantId,
+  }));
+
+  await _insertTicketChunks(newTicketRows);
+
+  return { ticketsLoaded: newTicketRows.length };
+};
+
 module.exports = {
   createGame,
   updateGame,
@@ -678,6 +733,7 @@ module.exports = {
   getTicketHistory,
   getWinnerHistory,
   getGameBusinessSummary,
+  loadBackupTickets,
 };
 
 

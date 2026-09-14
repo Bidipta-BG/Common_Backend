@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const { validateBody } = require('../utils/validateBody');
 const { requireAuth, requireRole, requireTenantMatch } = require('../middleware/auth');
-const { listTickets, listAdminTickets, bookRequest, bookDirect, bookBulk } = require('../controllers/tickets.controller');
+const { listTickets, listAdminTickets, bookRequest, bookDirect, bookBulk, editTicket, unbookTicket } = require('../controllers/tickets.controller');
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -57,6 +57,11 @@ router.post(
   bookRequest
 );
 
+const editTicketSchema = z.object({
+  playerName:  z.string().min(1, 'playerName is required'),
+  playerPhone: z.string().min(1, 'playerPhone is required'),
+});
+
 // ─── PROTECTED ROUTES ──────────────────────────────────────────────────────────
 
 // GET /tenants/:tenantId/games/:gameId/admin-tickets
@@ -78,6 +83,27 @@ router.post(
   requireTenantMatch,
   validateBody(bookDirectSchema),
   bookDirect
+);
+
+// PATCH /tenants/:tenantId/games/:gameId/tickets/:ticketId
+// Edit player_name and/or player_phone of a booked ticket.
+router.patch(
+  '/:tenantId/games/:gameId/tickets/:ticketId',
+  requireAuth,
+  requireRole('tenant_admin', 'agent'),
+  requireTenantMatch,
+  validateBody(editTicketSchema),
+  editTicket
+);
+
+// POST /tenants/:tenantId/games/:gameId/tickets/:ticketId/unbook
+// Resets a booked ticket back to 'available', wiping all player info.
+router.post(
+  '/:tenantId/games/:gameId/tickets/:ticketId/unbook',
+  requireAuth,
+  requireRole('tenant_admin', 'agent'),
+  requireTenantMatch,
+  unbookTicket
 );
 
 module.exports = router;

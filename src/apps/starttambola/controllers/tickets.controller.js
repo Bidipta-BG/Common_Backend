@@ -73,4 +73,33 @@ const bookBulk = async (req, res, next) => {
   }
 };
 
-module.exports = { listTickets, listAdminTickets, bookRequest, bookDirect, bookBulk };
+// ─── PATCH .../tickets/:ticketId (tenant_admin | agent) ──────────────────────
+const editTicket = async (req, res, next) => {
+  try {
+    const ticket = await ticketsService.editTicket(
+      req.params.tenantId,
+      req.params.gameId,
+      req.params.ticketId,
+      req.body
+    );
+    return res.status(200).json({ data: ticket });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── POST .../tickets/:ticketId/unbook (tenant_admin | agent) ──────────────────
+const unbookTicket = async (req, res, next) => {
+  try {
+    const ticket = await ticketsService.unbookTicket(
+      req.params.tenantId,
+      req.params.gameId,
+      req.params.ticketId
+    );
+    return res.status(200).json({ data: ticket });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = { listTickets, listAdminTickets, bookRequest, bookDirect, bookBulk, editTicket, unbookTicket };

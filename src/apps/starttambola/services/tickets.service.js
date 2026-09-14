@@ -262,4 +262,89 @@ const bookBulk = async (tenantId, gameId, { ticketIds, playerName, playerPhone }
   return booked;
 };
 
-module.exports = { listGameTickets, listAdminGameTickets, createBookRequest, bookDirect, bookBulk };
+// ─── editTicket ──────────────────────────────────────────────────────────────
+// PROTECTED — edits player_name and player_phone on a booked ticket.
+// Only works if status === 'booked' (or confirmed). Returns 404 if not found, 409 if not booked.
+
+const editTicket = async (tenantId, gameId, ticketId, { playerName, playerPhone }) => {
+  const { data: ticket, error } = await supabaseAdmin
+    .from('tickets')
+    .update({
+      player_name:  playerName,
+      player_phone: playerPhone,
+    })
+    .eq('id',        ticketId)
+    .eq('game_id',   gameId)
+    .eq('tenant_id', tenantId)
+    .in('status',    ['booked', 'confirmed']) // Only edit booked/confirmed tickets
+    .select('*, agents(name)')
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      const { data: check } = await supabaseAdmin
+        .from('tickets')
+        .select('id, status')
+        .eq('id', ticketId)
+        .eq('game_id', gameId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (!check) throw new AppError('Ticket not found', 'NOT_FOUND', 404);
+      throw new AppError(
+        `Cannot edit ticket — current status is '${check.status}', expected 'booked' or 'confirmed'`,
+        'CONFLICT',
+        409
+      );
+    }
+    handleSupabaseError(error, 'Ticket');
+  }
+
+  return ticket;
+};
+
+// ─── unbookTicket ─────────────────────────────────────────────────────────────
+// PROTECTED — resets a booked ticket back to 'available',
+// wiping all player and agent info.
+
+const unbookTicket = async (tenantId, gameId, ticketId) => {
+  const { data: ticket, error } = await supabaseAdmin
+    .from('tickets')
+    .update({
+      status:       'available',
+      player_name:  null,
+      player_phone: null,
+      booked_via:   null,
+      agent_id:     null,
+    })
+    .eq('id',        ticketId)
+    .eq('game_id',   gameId)
+    .eq('tenant_id', tenantId)
+    .in('status',    ['booked', 'confirmed']) // Only unbook a currently booked ticket
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      const { data: check } = await supabaseAdmin
+        .from('tickets')
+        .select('id, status')
+        .eq('id', ticketId)
+        .eq('game_id', gameId)
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (!check) throw new AppError('Ticket not found', 'NOT_FOUND', 404);
+      throw new AppError(
+        `Cannot unbook ticket — current status is '${check.status}', expected 'booked' or 'confirmed'`,
+        'CONFLICT',
+        409
+      );
+    }
+    handleSupabaseError(error, 'Ticket');
+  }
+
+  return ticket;
+};
+
+module.exports = { listGameTickets, listAdminGameTickets, createBookRequest, bookDirect, bookBulk, editTicket, unbookTicket };

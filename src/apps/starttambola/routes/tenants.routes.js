@@ -14,9 +14,10 @@ const createTenantSchema = z.object({
   ownerName:    z.string().min(1, 'ownerName is required'),
   ownerEmail:   z.string().email('ownerEmail must be a valid email address'),
   ownerPhone:   z.string().min(6, 'ownerPhone is required'),
-  ownerPassword: z.string().min(6, 'ownerPassword must be at least 6 characters').optional(),
+  ownerPassword: z.string().min(4, 'ownerPassword must be at least 4 characters').optional(),
   plan:         z.string().min(1, 'plan is required'),
   themeId:      z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, 'themeId must be a valid UUID').optional(),
+  referralCode: z.string().optional(),
 });
 
 // ─── Zod schema: POST /internal/tenants/check-availability ───────────────────
@@ -63,7 +64,7 @@ publicRouter.get('/:tenantId', getTenantById);
 // Requires tenant_admin role and matching tenantId.
 const tenantAuth = [requireAuth, requireRole('tenant_admin'), requireTenantMatch];
 const updateTenantSchema = z.object({
-  theme_id: z.string().uuid().optional().nullable(),
+  theme_id: z.string().optional().nullable(),
   organizer_whatsapp_number: z.string().optional().nullable(),
   organizer_whatsapp_group_link: z.string().optional().nullable(),
   website_status: z.enum(['open', 'closed']).optional(),
@@ -74,6 +75,7 @@ const updateTenantSchema = z.object({
   telegram_link: z.string().optional().nullable(),
   whatsapp_active: z.boolean().optional(),
   telegram_active: z.boolean().optional(),
+  game_name: z.string().min(1).max(100).optional(),
 });
 
 publicRouter.patch(

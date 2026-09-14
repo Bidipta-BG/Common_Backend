@@ -109,6 +109,9 @@ router.use('/tenants', subscriptionsAuthRoutes);
 // Mounted bare (no prefix) because paths span /themes and /tenants namespaces.
 router.use(themesRoutes);
 
+const referrersRoutes = require('./routes/referrers.routes');
+const internalReferralsRoutes = require('./routes/internalReferrals.routes');
+
 // ─── Internal routes (all require X-Internal-Key) ────────────────────────────
 // POST   /api/starttambola/internal/tenants
 // POST   /api/starttambola/internal/tenants/:id/activate
@@ -118,6 +121,10 @@ router.use(themesRoutes);
 router.use('/internal/tenants', requireSuperAdminKey, tenantsInternalRoutes);
 router.use('/internal/tenants', requireSuperAdminKey, subscriptionsInternalRoutes);
 router.use('/internal/jobs',    requireSuperAdminKey, jobsRoutes);
+router.use('/internal/referrals', requireSuperAdminKey, internalReferralsRoutes);
+
+// ─── Referral routes ────────────────────────────────────────────────────────
+router.use('/referrers', referrersRoutes);
 
 // Future resource routes:
 // router.use('/games',   requireAuth, gamesRoutes);

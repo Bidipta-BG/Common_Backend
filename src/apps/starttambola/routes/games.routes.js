@@ -17,6 +17,7 @@ const {
   getTicketHistory,
   getWinnerHistory,
   getGameBusinessSummary,
+  loadBackupTickets,
 } = require('../controllers/games.controller');
 
 // ─── Shared auth guard ────────────────────────────────────────────────────────
@@ -95,6 +96,14 @@ router.post('/:tenantId/games/:gameId/shuffle-tickets', ...gameAuth, shuffleTick
 
 // POST   /tenants/:tenantId/games/:gameId/reset-game
 router.post('/:tenantId/games/:gameId/reset-game', ...gameAuth, resetGame);
+
+// POST   /tenants/:tenantId/games/:gameId/load-backup
+router.post(
+  '/:tenantId/games/:gameId/load-backup',
+  ...gameAuth,
+  validateBody(z.object({ sourceGameId: z.string().uuid('Invalid source game ID') })),
+  loadBackupTickets
+);
 
 // DELETE /tenants/:tenantId/games/:gameId
 router.delete('/:tenantId/games/:gameId', ...gameAuth, deleteGame);

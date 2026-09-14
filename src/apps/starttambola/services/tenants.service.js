@@ -65,6 +65,7 @@ const createTenant = async ({
   ownerPassword,
   plan,
   themeId,
+  referralCode,
 }) => {
   // ── Step 1: Create tenant ──────────────────────────────────────────────────
   const { data: tenant, error: tenantError } = await supabaseAdmin
@@ -196,6 +197,26 @@ const createTenant = async ({
       throw new AppError(`Bumper Auth user creation failed: ${bumperAuthError.message}`, 'AUTH_ERROR', 500);
     }
 
+    // ── Step 5: Log Pending Referral ─────────────────────────────────────────
+    if (referralCode) {
+      const { data: referrer } = await supabaseAdmin
+        .from('referrers')
+        .select('id')
+        .eq('referral_code', referralCode)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (referrer) {
+        await supabaseAdmin.from('referrals').insert({
+          referrer_id: referrer.id,
+          tenant_id: tenant.id,
+          referral_code: referralCode,
+          plan: plan,
+          status: 'pending'
+        });
+      }
+    }
+
     return { tenant, subscription: createdSubscription };
   } catch (err) {
     console.warn(`[createTenant] Registration failed for ${ownerEmail}. Rolling back...`);
@@ -244,7 +265,7 @@ const createTenant = async ({
 const getTenantByDomain = async (domain) => {
   const { data, error } = await supabaseAdmin
     .from('tenants')
-    .select('id, business_name, domain, status, theme_id, theme_overrides, organizer_whatsapp_number, organizer_whatsapp_group_link, is_bumper_game, website_status, announcement_text, owner_name, owner_email, owner_phone, recovery_email, telegram_link, whatsapp_active, telegram_active')
+    .select('id, business_name, domain, status, theme_id, theme_overrides, organizer_whatsapp_number, organizer_whatsapp_group_link, is_bumper_game, website_status, announcement_text, owner_name, owner_email, owner_phone, recovery_email, telegram_link, whatsapp_active, telegram_active, game_name')
     .eq('domain', domain)
     .single();
 
@@ -269,6 +290,7 @@ const getTenantByDomain = async (domain) => {
     telegramLink:    data.telegram_link ?? null,
     whatsappActive:  data.whatsapp_active ?? true,
     telegramActive:  data.telegram_active ?? false,
+    gameName:        data.game_name ?? 'Jackpot Tambola',
   };
 };
 
@@ -301,6 +323,7 @@ const getTenantById = async (tenantId) => {
       telegram_link,
       whatsapp_active,
       telegram_active,
+      game_name,
       themes (
         id,
         name,
@@ -332,6 +355,7 @@ const getTenantById = async (tenantId) => {
     telegramLink:    data.telegram_link ?? null,
     whatsappActive:  data.whatsapp_active ?? true,
     telegramActive:  data.telegram_active ?? false,
+    gameName:        data.game_name ?? 'Jackpot Tambola',
     theme:           data.themes ?? null,   // full theme row if a theme is selected
   };
 };
@@ -339,7 +363,7 @@ const getTenantById = async (tenantId) => {
 // ─── updateTenant ──────────────────────────────────────────────────────────────
 // Protected endpoint logic to update tenant details (like WhatsApp number or Theme ID)
 const updateTenant = async (tenantId, updates) => {
-  const allowedFields = ['theme_id', 'organizer_whatsapp_number', 'organizer_whatsapp_group_link', 'website_status', 'announcement_text', 'owner_name', 'owner_phone', 'recovery_email', 'telegram_link', 'whatsapp_active', 'telegram_active'];
+  const allowedFields = ['theme_id', 'organizer_whatsapp_number', 'organizer_whatsapp_group_link', 'website_status', 'announcement_text', 'owner_name', 'owner_phone', 'recovery_email', 'telegram_link', 'whatsapp_active', 'telegram_active', 'game_name'];
   const updateData = {};
 
   for (const [key, value] of Object.entries(updates)) {

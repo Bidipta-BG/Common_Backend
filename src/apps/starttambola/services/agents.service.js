@@ -51,9 +51,12 @@ const createAgent = async (tenantId, {
   const fakeEmail = `${tenantId}_${cleanNameForEmail}@agent.tambola.com`;
 
   // ── Step 1: Supabase Auth user ─────────────────────────────────────────────
+  // Pad the password to bypass Supabase's strict 6-character limit
+  const paddedPassword = password + '_TblPadX9!';
+
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: fakeEmail,
-    password,
+    password: paddedPassword,
     email_confirm: true, // admin-created — skip OTP
     user_metadata: { full_name: normalizedName },
     app_metadata:  { tenant_id: tenantId, role: 'agent' },
@@ -146,7 +149,7 @@ const listAgents = async (tenantId) => {
 const BAN_DURATION_PERMANENT = '876600h'; // 100 years
 
 const updateAgent = async (tenantId, agentId, updates) => {
-  const { name, status } = updates;
+  const { name, status, password, whatsapp_number, telegram_username, sms_number, email_id, facebook_id } = updates;
 
   // Ownership check + get user_id for auth operations
   const agent = await _getAgentOrThrow(tenantId, agentId);
@@ -165,6 +168,20 @@ const updateAgent = async (tenantId, agentId, updates) => {
         `[Agents] Failed to set ban_duration='${banDuration}' for auth user ${agent.user_id}:`,
         banError.message
       );
+    }
+  }
+
+  // ── Sync password change to Supabase Auth ─────────────────────────────────
+  if (password !== undefined && password !== agent.plain_password) {
+    if (agent.user_id) {
+      const paddedPassword = password + '_TblPadX9!';
+      const { error: passError } = await supabaseAdmin.auth.admin.updateUserById(
+        agent.user_id,
+        { password: paddedPassword }
+      );
+      if (passError) {
+        throw new AppError(`Failed to update auth password: ${passError.message}`, 'AUTH_ERROR', 500);
+      }
     }
   }
 
@@ -205,6 +222,13 @@ const updateAgent = async (tenantId, agentId, updates) => {
   const dbUpdate = {};
   if (name   !== undefined) dbUpdate.name   = name.trim();
   if (status !== undefined) dbUpdate.status = status;
+  if (password !== undefined) dbUpdate.plain_password = password;
+  if (updates.phone !== undefined) dbUpdate.phone = updates.phone;
+  if (whatsapp_number !== undefined) dbUpdate.whatsapp_number = whatsapp_number;
+  if (telegram_username !== undefined) dbUpdate.telegram_username = telegram_username;
+  if (sms_number !== undefined) dbUpdate.sms_number = sms_number;
+  if (email_id !== undefined) dbUpdate.email_id = email_id;
+  if (facebook_id !== undefined) dbUpdate.facebook_id = facebook_id;
 
   const { data: updatedAgent, error: updateError } = await supabaseAdmin
     .from('agents')
@@ -216,6 +240,25 @@ const updateAgent = async (tenantId, agentId, updates) => {
 
   if (updateError) handleSupabaseError(updateError, 'Agent');
   return updatedAgent;
+};
+
+const updateMyAgent = async (tenantId, userId, updates) => {
+  // First find the agent by user_id
+  const { data: agent, error } = await supabaseAdmin
+    .from('agents')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !agent) {
+    throw new AppError('Agent not found', 'NOT_FOUND', 404);
+  }
+
+  // Prevent agents from updating their status (banning themselves)
+  delete updates.status;
+
+  return updateAgent(tenantId, agent.id, updates);
 };
 
 // ─── getMyPerformance ─────────────────────────────────────────────────────────
@@ -290,6 +333,32 @@ const getMyTickets = async (tenantId, userId) => {
   return tickets ?? [];
 };
 
+// ─── deleteAgent ──────────────────────────────────────────────────────────────
+// Soft-deletes a single agent and removes their Supabase Auth user.
+const deleteAgent = async (tenantId, agentId) => {
+  const agent = await _getAgentOrThrow(tenantId, agentId);
+
+  // 1. Delete Supabase Auth user
+  if (agent.user_id) {
+    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(agent.user_id);
+    if (authError) {
+      console.error(`[Agents] Failed to delete auth user ${agent.user_id}:`, authError.message);
+      // We don't throw here so we can still soft-delete the DB record if auth deletion fails
+    }
+  }
+
+  // 2. Soft-delete the agent in the DB
+  const { error: updateError } = await supabaseAdmin
+    .from('agents')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId);
+
+  if (updateError) handleSupabaseError(updateError, 'Agent');
+
+  return { message: 'Agent deleted successfully.' };
+};
+
 // ─── deleteAllAgents ──────────────────────────────────────────────────────────
 // Soft-deletes all agents for a tenant. Also deletes their Supabase Auth users
 // so their phone numbers can be reused for new agents later.
@@ -324,5 +393,4 @@ const deleteAllAgents = async (tenantId) => {
   return { message: `Successfully deleted ${agents.length} agents.` };
 };
 
-module.exports = { createAgent, listAgents, updateAgent, getMyPerformance, getMyTickets, deleteAllAgents };
-
+module.exports = { createAgent, listAgents, updateAgent, updateMyAgent, getMyPerformance, getMyTickets, deleteAgent, deleteAllAgents };

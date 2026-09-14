@@ -141,10 +141,23 @@ const getWinnerHistory = async (req, res, next) => {
   }
 };
 
-// ─── GET /tenants/:tenantId/games/:gameId/business-summary ────────────────────
 const getGameBusinessSummary = async (req, res, next) => {
   try {
     const result = await gamesService.getGameBusinessSummary(req.params.tenantId, req.params.gameId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── POST /tenants/:tenantId/games/:gameId/load-backup ────────────────────────
+const loadBackupTickets = async (req, res, next) => {
+  try {
+    const result = await gamesService.loadBackupTickets(
+      req.params.tenantId,
+      req.params.gameId,
+      req.body.sourceGameId
+    );
     return res.status(200).json({ data: result });
   } catch (err) {
     return next(err);
@@ -166,6 +179,7 @@ module.exports = {
   getTicketHistory,
   getWinnerHistory,
   getGameBusinessSummary,
+  loadBackupTickets,
 };
 
 
