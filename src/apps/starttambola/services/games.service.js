@@ -114,6 +114,17 @@ const createGame = async (tenantId, {
 const updateGame = async (tenantId, gameId, updates) => {
   const game = await _getGameOrThrow(tenantId, gameId);
 
+  // Guard: cannot update settings while the game engine is running —
+  // the engine caches tickets/dividends in memory at start time.
+  // Changing total_tickets, price, etc. during a live game would desync DB from engine.
+  if (game.status === 'running') {
+    throw new AppError(
+      'Cannot update game settings while the game is currently running.',
+      'BAD_REQUEST',
+      400
+    );
+  }
+
   const {
     scheduledAt,
     totalTickets,
