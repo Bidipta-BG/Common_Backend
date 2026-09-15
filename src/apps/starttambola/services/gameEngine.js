@@ -131,13 +131,15 @@ const _checkDividends = async (gameId) => {
         for (const window of winningWindowsInThisTick) {
           const matchedNumbers = window.map(t => t.ticket_number);
           
-          newWinnerRows.push({
-            game_id:         gameId,
-            tenant_id:       tenantId,
-            ticket_id:       window[0].id,
-            dividend_id:     dividend.id,
-            matched_numbers: matchedNumbers,
-          });
+          for (const t of window) {
+            newWinnerRows.push({
+              game_id:         gameId,
+              tenant_id:       tenantId,
+              ticket_id:       t.id,
+              dividend_id:     dividend.id,
+              matched_numbers: matchedNumbers,
+            });
+          }
         }
         // Mark dividend as won (closed for future ticks)
         wonDividends.set(dividend.id, winningWindowsInThisTick[0][0].id);
