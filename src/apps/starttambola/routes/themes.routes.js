@@ -2,13 +2,19 @@ const express = require('express');
 const { z } = require('zod');
 const { validateBody } = require('../utils/validateBody');
 const { requireAuth, requireRole, requireTenantMatch } = require('../middleware/auth');
-const { getThemes, updateTheme, getPosterTemplates } = require('../controllers/themes.controller');
+const { getThemes, updateTheme, updateThemeByDomain, getPosterTemplates } = require('../controllers/themes.controller');
 
 // ─── Zod schema ────────────────────────────────────────────────────────────────
 const updateThemeSchema = z.object({
   themeId: z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, 'themeId must be a valid UUID'),
   // Arbitrary key-value overrides (colours, fonts, etc.) stored as JSONB.
   // null/undefined means "use theme defaults with no overrides".
+  themeOverrides: z.record(z.any()).nullable().optional(),
+});
+
+const updateThemeByDomainSchema = z.object({
+  domain: z.string().min(1, 'domain is required'),
+  themeId: z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, 'themeId must be a valid UUID'),
   themeOverrides: z.record(z.any()).nullable().optional(),
 });
 
@@ -32,6 +38,16 @@ router.patch(
   requireTenantMatch,
   validateBody(updateThemeSchema),
   updateTheme
+);
+
+// POST /themes/update-by-domain (tenant_admin)
+// Updates theme_id + theme_overrides using the domain to identify the tenant.
+router.post(
+  '/themes/update-by-domain',
+  requireAuth,
+  requireRole('tenant_admin'),
+  validateBody(updateThemeByDomainSchema),
+  updateThemeByDomain
 );
 
 // GET  /poster-templates  (PUBLIC)

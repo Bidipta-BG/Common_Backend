@@ -41,12 +41,17 @@ const updateTenantTheme = async (tenantId, { themeId, themeOverrides }) => {
     );
   }
 
+  const updateData = {
+    theme_id: themeId,
+  };
+  
+  if (themeOverrides !== undefined) {
+    updateData.theme_overrides = themeOverrides ?? {};
+  }
+
   const { data: tenant, error: updateErr } = await supabaseAdmin
     .from('tenants')
-    .update({
-      theme_id:        themeId,
-      theme_overrides: themeOverrides ?? null,
-    })
+    .update(updateData)
     .eq('id', tenantId)
     .select('id, theme_id, theme_overrides')
     .single();
@@ -72,4 +77,30 @@ const listPosterTemplates = async () => {
   return data ?? [];
 };
 
-module.exports = { listThemes, updateTenantTheme, listPosterTemplates };
+// ─── updateTenantThemeByDomain ────────────────────────────────────────────────
+// Finds a tenant by domain, verifies it belongs to the authenticated user's tenantId,
+// and updates the theme.
+
+const updateTenantThemeByDomain = async (authTenantId, { domain, themeId, themeOverrides }) => {
+  const { data: tenant, error: domainErr } = await supabaseAdmin
+    .from('tenants')
+    .select('id')
+    .eq('domain', domain)
+    .maybeSingle();
+
+  if (domainErr) handleSupabaseError(domainErr, 'Tenant');
+  
+  if (!tenant) {
+    throw new AppError(`No tenant found for domain '${domain}'`, 'NOT_FOUND', 404);
+  }
+
+  // Security check: ensure they can only update their own tenant
+  if (tenant.id !== authTenantId) {
+    throw new AppError('You do not have permission to update this tenant.', 'FORBIDDEN', 403);
+  }
+
+  // Reuse existing update logic
+  return await updateTenantTheme(tenant.id, { themeId, themeOverrides });
+};
+
+module.exports = { listThemes, updateTenantTheme, listPosterTemplates, updateTenantThemeByDomain };

@@ -1,4 +1,4 @@
-const { listThemes, updateTenantTheme, listPosterTemplates } = require('../services/themes.service');
+const { listThemes, updateTenantTheme, listPosterTemplates, updateTenantThemeByDomain } = require('../services/themes.service');
 
 // ─── GET /themes (PUBLIC) ─────────────────────────────────────────────────────
 const getThemes = async (req, res, next) => {
@@ -20,6 +20,16 @@ const updateTheme = async (req, res, next) => {
   }
 };
 
+// ─── POST /themes/update-by-domain (tenant_admin) ─────────────────────────────
+const updateThemeByDomain = async (req, res, next) => {
+  try {
+    const result = await updateTenantThemeByDomain(req.auth.tenantId, req.body);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // ─── GET /poster-templates (PUBLIC) ──────────────────────────────────────────
 const getPosterTemplates = async (req, res, next) => {
   try {
@@ -30,4 +40,4 @@ const getPosterTemplates = async (req, res, next) => {
   }
 };
 
-module.exports = { getThemes, updateTheme, getPosterTemplates };
+module.exports = { getThemes, updateTheme, updateThemeByDomain, getPosterTemplates };
