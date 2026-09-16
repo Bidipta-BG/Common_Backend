@@ -105,6 +105,11 @@ const _checkDividends = async (gameId) => {
       const windows = dividend.pattern_type === 'half_seat_bonus' ? sheetWindows.half : sheetWindows.full;
       
       let winningWindowsInThisTick = [];
+      // Tracks which owners already have a winning window in this tick.
+      // Prevents a player's overlapping windows (e.g. [1,2,3] AND [2,3,4] AND [3,4,5]
+      // for a 5-ticket player) from all qualifying at once — only the first one wins.
+      // Different owners each get their own entry, so tied players still both win.
+      const ownersWonThisTick = new Set();
 
       for (const window of windows) {
         // Check if every ticket in window has >= 2 called numbers
@@ -123,14 +128,33 @@ const _checkDividends = async (gameId) => {
         }
 
         if (allHaveTwoPlus) {
-          winningWindowsInThisTick.push(window);
+          // Identify the owner of this window — same key logic as sheetWindows._ownerKey.
+          // All tickets in a window share the same owner (guaranteed by sheetWindows.js),
+          // so checking window[0] is sufficient.
+          const firstTicket = window[0];
+          const ownerKey =
+            firstTicket.player_phone?.trim() ||
+            `name:${firstTicket.player_name?.trim()}` ||
+            firstTicket.id; // last-resort fallback (should never be needed for booked tickets)
+
+          if (!ownersWonThisTick.has(ownerKey)) {
+            // First qualifying window for this owner this tick → accept it
+            winningWindowsInThisTick.push(window);
+            ownersWonThisTick.add(ownerKey);
+          }
+          // else: this owner already has a winning window this tick → skip silently
         }
       }
 
       if (winningWindowsInThisTick.length > 0) {
         for (const window of winningWindowsInThisTick) {
-          const matchedNumbers = window.map(t => t.ticket_number);
-          
+          // Collect the actual called Tambola numbers (1–90) that appear on
+          // any ticket in this window. These are the numbers that are "cut"
+          // across the winning set — used as proof in the UI.
+          const matchedNumbers = window.flatMap((t) =>
+            t.grid.flat().filter((cell) => cell > 0 && calledSet.has(cell))
+          );
+
           for (const t of window) {
             newWinnerRows.push({
               game_id:         gameId,
@@ -378,7 +402,7 @@ const _loadGameIntoMemory = async (game, existingCalledNumbers = [], lastCalledA
   // Load tickets (ONLY BOOKED tickets can play)
   const { data: tickets, error: ticketErr } = await supabaseAdmin
     .from('tickets')
-    .select('id, ticket_number, grid')
+    .select('id, ticket_number, grid, player_name, player_phone')
     .eq('game_id', gameId)
     .eq('status', 'booked') // Prevent unsold/available tickets from stealing prizes!
     .order('ticket_number', { ascending: true });
