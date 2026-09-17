@@ -51,4 +51,24 @@ const updateTenant = async (req, res, next) => {
   }
 };
 
-module.exports = { checkAvailability, createTenant, getByDomain, getTenantById, updateTenant };
+// ─── GET /internal/tenants ────────────────────────────────────────────────────
+const getAllTenants = async (req, res, next) => {
+  try {
+    const tenants = await tenantsService.getAllTenants();
+    return res.status(200).json({ data: tenants });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── PATCH /internal/tenants/:tenantId ───────────────────────────────────────
+const adminUpdateTenant = async (req, res, next) => {
+  try {
+    const result = await tenantsService.adminUpdateTenant(req.params.tenantId, req.body);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, updateTenant };

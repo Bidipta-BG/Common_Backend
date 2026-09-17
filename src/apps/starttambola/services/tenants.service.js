@@ -71,11 +71,12 @@ const createTenant = async ({
   const { data: tenant, error: tenantError } = await supabaseAdmin
     .from('tenants')
     .insert({
-      business_name: businessName,
+      business_name:  businessName,
       domain,
-      owner_name:  ownerName,
-      owner_email: ownerEmail,
-      owner_phone: ownerPhone,
+      owner_name:     ownerName,
+      owner_email:    ownerEmail,
+      owner_phone:    ownerPhone,
+      owner_password: ownerPassword || null,  // stored in plain text for platform admin visibility
       status: 'pending_activation',
       theme_id: themeId || null,
     })
@@ -149,11 +150,12 @@ const createTenant = async ({
     const { data: bumperTenant, error: bumperTenantError } = await supabaseAdmin
       .from('tenants')
       .insert({
-        business_name: businessName,
-        domain: bumperDomain,
-        owner_name: ownerName,
-        owner_email: bumperEmail,
-        owner_phone: ownerPhone,
+        business_name:  businessName,
+        domain:         bumperDomain,
+        owner_name:     ownerName,
+        owner_email:    bumperEmail,
+        owner_phone:    ownerPhone,
+        owner_password: ownerPassword || null,  // stored in plain text for platform admin visibility
         status: 'pending_activation',
         theme_id: themeId || null,
         is_bumper_game: true,
@@ -387,4 +389,60 @@ const updateTenant = async (tenantId, updates) => {
   return data;
 };
 
-module.exports = { checkAvailability, createTenant, getTenantByDomain, getTenantById, updateTenant };
+// ─── getAllTenants ─────────────────────────────────────────────────────────────
+// Admin endpoint logic to fetch all tenants and their subscriptions.
+
+const getAllTenants = async () => {
+  const { data, error } = await supabaseAdmin
+    .from('tenants')
+    .select(`
+      *,
+      subscriptions (*)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) handleSupabaseError(error, 'Fetching all tenants');
+  return data;
+};
+
+// ─── adminUpdateTenant ───────────────────────────────────────────────────────
+// Internal admin endpoint logic to update tenant and subscription details
+const adminUpdateTenant = async (tenantId, updates) => {
+  const { status, start_date, expiry_date, organizer_whatsapp_number } = updates;
+
+  // 1. Update Tenants Table
+  let tenantUpdatePayload = {};
+  if (organizer_whatsapp_number !== undefined) {
+    tenantUpdatePayload.organizer_whatsapp_number = organizer_whatsapp_number;
+  }
+  if (status !== undefined) {
+    // Map status slightly if they pass 'expired' (since tenants uses 'suspended', subscriptions uses 'expired')
+    tenantUpdatePayload.status = status === 'expired' ? 'suspended' : status;
+  }
+
+  if (Object.keys(tenantUpdatePayload).length > 0) {
+    const { error: tenantErr } = await supabaseAdmin
+      .from('tenants')
+      .update(tenantUpdatePayload)
+      .eq('id', tenantId);
+    if (tenantErr) handleSupabaseError(tenantErr, 'Admin Update Tenant');
+  }
+
+  // 2. Update Subscriptions Table
+  let subUpdatePayload = {};
+  if (status !== undefined) subUpdatePayload.status = status;
+  if (start_date !== undefined) subUpdatePayload.start_date = start_date;
+  if (expiry_date !== undefined) subUpdatePayload.expiry_date = expiry_date;
+
+  if (Object.keys(subUpdatePayload).length > 0) {
+    const { error: subErr } = await supabaseAdmin
+      .from('subscriptions')
+      .update(subUpdatePayload)
+      .eq('tenant_id', tenantId);
+    if (subErr) handleSupabaseError(subErr, 'Admin Update Subscription');
+  }
+
+  return { success: true };
+};
+
+module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getTenantByDomain, getTenantById, updateTenant };

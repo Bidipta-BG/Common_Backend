@@ -1,6 +1,6 @@
 const express = require('express');
 const { validateBody, z } = require('../utils/validateBody');
-const { checkAvailability, createTenant, getByDomain, getTenantById, updateTenant } = require('../controllers/tenants.controller');
+const { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, updateTenant } = require('../controllers/tenants.controller');
 const { getCurrentGame } = require('../controllers/games.controller');
 
 // ─── Zod schema: POST /internal/tenants ──────────────────────────────────────
@@ -27,9 +27,25 @@ const checkAvailabilitySchema = z.object({
   domain: z.string().min(1, 'domain is required'),
 });
 
+// ─── Zod schema: PATCH /internal/tenants/:tenantId ───────────────────────────
+const adminUpdateSchema = z.object({
+  status: z.enum(['pending_activation', 'active', 'expired', 'suspended']).optional(),
+  start_date: z.string().optional(),
+  expiry_date: z.string().optional(),
+  organizer_whatsapp_number: z.string().optional().nullable(),
+});
+
 // ─── Internal router (mounted at /api/starttambola/internal/tenants) ──────────
 // All routes here require requireSuperAdminKey (applied at mount in index.js).
 const internalRouter = express.Router();
+
+// GET /internal/tenants
+// Fetches all tenants and their subscriptions (Admin Dashboard)
+internalRouter.get('/', getAllTenants);
+
+// PATCH /internal/tenants/:tenantId
+// Updates tenant and subscription details (Admin Dashboard)
+internalRouter.patch('/:tenantId', validateBody(adminUpdateSchema), adminUpdateTenant);
 
 // POST /internal/tenants/check-availability  ← must be registered BEFORE /:id routes
 internalRouter.post('/check-availability', validateBody(checkAvailabilitySchema), checkAvailability);
