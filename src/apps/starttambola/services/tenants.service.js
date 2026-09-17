@@ -445,4 +445,39 @@ const adminUpdateTenant = async (tenantId, updates) => {
   return { success: true };
 };
 
-module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getTenantByDomain, getTenantById, updateTenant };
+// ─── markTenantAsPaid ──────────────────────────────────────────────────────────
+// Called automatically after successful Cashfree payment.
+// Marks the subscription's is_paid flag to true for both the main and bumper tenant.
+const markTenantAsPaid = async (tenantId) => {
+  // Get the main tenant to find its domain
+  const { data: tenant, error: fetchErr } = await supabaseAdmin
+    .from('tenants')
+    .select('domain')
+    .eq('id', tenantId)
+    .single();
+
+  if (fetchErr) handleSupabaseError(fetchErr, 'Fetching tenant for payment update');
+
+  // Find all tenants (main and bumper) associated with this domain
+  const bumperDomain = `bumper.${tenant.domain}`;
+  const { data: relatedTenants, error: relatedErr } = await supabaseAdmin
+    .from('tenants')
+    .select('id')
+    .in('domain', [tenant.domain, bumperDomain]);
+
+  if (relatedErr) handleSupabaseError(relatedErr, 'Fetching related tenants for payment update');
+
+  const tenantIds = relatedTenants.map(t => t.id);
+
+  // Update subscriptions to is_paid = true
+  const { error: updateErr } = await supabaseAdmin
+    .from('subscriptions')
+    .update({ is_paid: true })
+    .in('tenant_id', tenantIds);
+
+  if (updateErr) handleSupabaseError(updateErr, 'Updating subscription payment status');
+
+  return { success: true, updatedCount: tenantIds.length };
+};
+
+module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getTenantByDomain, getTenantById, markTenantAsPaid, updateTenant };

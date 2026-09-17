@@ -71,4 +71,14 @@ const adminUpdateTenant = async (req, res, next) => {
   }
 };
 
-module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, updateTenant };
+// ─── POST /internal/tenants/:tenantId/mark-paid ──────────────────────────────
+const markTenantAsPaid = async (req, res, next) => {
+  try {
+    const result = await tenantsService.markTenantAsPaid(req.params.tenantId);
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, markTenantAsPaid, updateTenant };

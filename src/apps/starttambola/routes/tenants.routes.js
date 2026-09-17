@@ -1,6 +1,6 @@
 const express = require('express');
 const { validateBody, z } = require('../utils/validateBody');
-const { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, updateTenant } = require('../controllers/tenants.controller');
+const { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, markTenantAsPaid, updateTenant } = require('../controllers/tenants.controller');
 const { getCurrentGame } = require('../controllers/games.controller');
 
 // ─── Zod schema: POST /internal/tenants ──────────────────────────────────────
@@ -46,6 +46,10 @@ internalRouter.get('/', getAllTenants);
 // PATCH /internal/tenants/:tenantId
 // Updates tenant and subscription details (Admin Dashboard)
 internalRouter.patch('/:tenantId', validateBody(adminUpdateSchema), adminUpdateTenant);
+
+// POST /internal/tenants/:tenantId/mark-paid
+// Marks a tenant and its bumper subscription as paid
+internalRouter.post('/:tenantId/mark-paid', markTenantAsPaid);
 
 // POST /internal/tenants/check-availability  ← must be registered BEFORE /:id routes
 internalRouter.post('/check-availability', validateBody(checkAvailabilitySchema), checkAvailability);
