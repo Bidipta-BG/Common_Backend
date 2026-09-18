@@ -96,6 +96,7 @@ const updateTenantSchema = z.object({
   whatsapp_active: z.boolean().optional(),
   telegram_active: z.boolean().optional(),
   game_name: z.string().min(1).max(100).optional(),
+  owner_password: z.string().min(4).optional().nullable(),
 });
 
 publicRouter.patch(

@@ -365,7 +365,7 @@ const getTenantById = async (tenantId) => {
 // ─── updateTenant ──────────────────────────────────────────────────────────────
 // Protected endpoint logic to update tenant details (like WhatsApp number or Theme ID)
 const updateTenant = async (tenantId, updates) => {
-  const allowedFields = ['theme_id', 'organizer_whatsapp_number', 'organizer_whatsapp_group_link', 'website_status', 'announcement_text', 'owner_name', 'owner_phone', 'recovery_email', 'telegram_link', 'whatsapp_active', 'telegram_active', 'game_name'];
+  const allowedFields = ['theme_id', 'organizer_whatsapp_number', 'organizer_whatsapp_group_link', 'website_status', 'announcement_text', 'owner_name', 'owner_phone', 'recovery_email', 'telegram_link', 'whatsapp_active', 'telegram_active', 'game_name', 'owner_password'];
   const updateData = {};
 
   for (const [key, value] of Object.entries(updates)) {
