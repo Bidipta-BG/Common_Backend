@@ -43,6 +43,21 @@ router.get('/by-code/:code', async (req, res, next) => {
   }
 });
 
+// GET /api/starttambola/referrers/status-by-email?email=xxx  (public, no auth)
+// Must be registered BEFORE /:id routes to avoid matching 'status-by-email' as an id.
+router.get('/status-by-email', async (req, res, next) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      throw new AppError('email query parameter is required', 'BAD_REQUEST', 400);
+    }
+    const data = await referrersService.getStatusByEmail(email);
+    res.json({ data });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/starttambola/referrers/:id/dashboard
 router.get('/:id/dashboard', requireSuperAdminKey, async (req, res, next) => {
   try {

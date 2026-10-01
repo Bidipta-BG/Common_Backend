@@ -119,7 +119,7 @@ const validateReferralCode = async (code) => {
   const { data: referrer, error } = await supabaseAdmin
     .from('referrers')
     .select('id, name, is_active')
-    .eq('referral_code', code)
+    .ilike('referral_code', code)   // case-insensitive: 'bidi4129' matches 'BIDI4129'
     .maybeSingle();
 
   if (error) {
@@ -222,7 +222,7 @@ const confirmReferral = async ({ tenantId, orderId }) => {
   if (refError) throw new AppError(refError.message, 'SUPABASE_ERROR', 500);
 
   const newTotalPoints = referrer.referral_points_total + points;
-  const newFreeMonths = Math.floor(newTotalPoints / 10); // 10 points = 1 free month
+  const newFreeMonths = Math.floor(newTotalPoints / 8); // 8 referrals = 1 free month
 
   await supabaseAdmin
     .from('referrers')
@@ -235,10 +235,50 @@ const confirmReferral = async ({ tenantId, orderId }) => {
   return { success: true };
 };
 
+// ─── getStatusByEmail ─────────────────────────────────────────────────────────
+// Public status lookup by referrer email — no password required.
+// Returns referral code, active status, and list of referrals made using the code.
+const getStatusByEmail = async (email) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data: referrer, error } = await supabaseAdmin
+    .from('referrers')
+    .select('id, referral_code, is_active')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+
+  if (error) throw new AppError(error.message, 'SUPABASE_ERROR', 500);
+
+  if (!referrer) return { found: false };
+
+  const { data: referrals, error: refError } = await supabaseAdmin
+    .from('referrals')
+    .select('id, plan, status, created_at, tenants(owner_name, domain)')
+    .eq('referrer_id', referrer.id)
+    .order('created_at', { ascending: false });
+
+  if (refError) throw new AppError(refError.message, 'SUPABASE_ERROR', 500);
+
+  return {
+    found: true,
+    referralCode: referrer.referral_code,
+    isActive: referrer.is_active,
+    totalReferrals: referrals.length,
+    referrals: referrals.map(r => ({
+      customerName: r.tenants?.owner_name?.split(' ')[0] || 'Someone',
+      domain: r.tenants?.domain || null,
+      date: r.created_at,
+      plan: r.plan,
+      status: r.status,
+    })),
+  };
+};
+
 module.exports = {
   createReferrer,
   authenticateReferrer,
   validateReferralCode,
   getDashboardStats,
-  confirmReferral
+  confirmReferral,
+  getStatusByEmail,
 };
