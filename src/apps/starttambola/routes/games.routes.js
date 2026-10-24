@@ -55,14 +55,16 @@ const updateGameSchema = z.object({
 );
 
 const dividendItemSchema = z.object({
-  name:         z.string().min(1, 'Dividend name is required'),
-  patternType:  z.enum(
+  name:                 z.string().min(1, 'Dividend name is required'),
+  patternType:          z.enum(
     DIVIDEND_PATTERN_TYPES,
     { errorMap: () => ({ message: `patternType must be one of: ${DIVIDEND_PATTERN_TYPES.join(', ')}` }) }
   ),
-  active:       z.boolean({ required_error: 'active (boolean) is required' }),
-  prizeAmount:  z.number({ required_error: 'prizeAmount is required' }).nonnegative(),
-  sortOrder:    z.number({ required_error: 'sortOrder is required' }).int().nonnegative(),
+  active:               z.boolean({ required_error: 'active (boolean) is required' }),
+  prizeAmount:          z.number({ required_error: 'prizeAmount is required' }).nonnegative(),
+  sortOrder:            z.number({ required_error: 'sortOrder is required' }).int().nonnegative(),
+  targetTicketNumber:   z.number().int().positive().nullable().optional(),
+  target_ticket_number: z.number().int().positive().nullable().optional(),
 });
 
 // Body is the full dividends array (replaces all existing dividends)

@@ -35,6 +35,7 @@ const { handleSupabaseError }          = require('../utils/supabaseError');
 const { isPatternComplete, getMatchedNumbers } = require('../utils/patternMatcher');
 const { broadcastToGame, broadcastToTenant }  = require('../realtime/broadcaster');
 const { computeSheetWindows }          = require('../utils/sheetWindows');
+const { planCallSequence }            = require('../utils/sequencePlanner');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -278,7 +279,20 @@ const _processGameTick = async (gameId) => {
   const { tenantId, calledNumbers, calledSet } = state;
 
   // ── Pick the next uncalled number ─────────────────────────────────────────
-  const nextNumber = _pickNextNumber(calledSet);
+  let nextNumber = null;
+  if (
+    state.plannedSequence &&
+    Array.isArray(state.plannedSequence) &&
+    calledNumbers.length < state.plannedSequence.length
+  ) {
+    const candidate = state.plannedSequence[calledNumbers.length];
+    if (!calledSet.has(candidate)) {
+      nextNumber = candidate;
+    }
+  }
+  if (nextNumber === null) {
+    nextNumber = _pickNextNumber(calledSet);
+  }
 
   if (nextNumber === null) {
     // All 90 numbers have been called → complete the game
@@ -409,12 +423,13 @@ const _loadGameIntoMemory = async (game, existingCalledNumbers = [], lastCalledA
 
   if (ticketErr) throw new Error(`Failed to load tickets for game ${gameId}: ${ticketErr.message}`);
 
-  // Load active dividends
+  // Load active dividends in consistent sort order
   const { data: dividends, error: divErr } = await supabaseAdmin
     .from('dividends')
-    .select('id, pattern_type')
+    .select('id, name, pattern_type, target_ticket_number, sort_order')
     .eq('game_id', gameId)
-    .eq('active', true);
+    .eq('active', true)
+    .order('sort_order', { ascending: true });
 
   if (divErr) throw new Error(`Failed to load dividends for game ${gameId}: ${divErr.message}`);
 
@@ -436,18 +451,50 @@ const _loadGameIntoMemory = async (game, existingCalledNumbers = [], lastCalledA
 
   const sheetWindows = computeSheetWindows(tickets ?? []);
 
+  // Check if planned_sequence exists on the game record, or generate one if targets exist
+  let plannedSequence = Array.isArray(game.planned_sequence) ? game.planned_sequence : null;
+
+  if (!plannedSequence) {
+    const targetDividends = (dividends ?? []).filter((d) => d.target_ticket_number != null);
+    if (targetDividends.length > 0) {
+      console.log(
+        `[GameEngine] Game ${gameId}: ${targetDividends.length} targeted dividend(s) configured. Generating deterministic call sequence...`
+      );
+      plannedSequence = planCallSequence(tickets ?? [], dividends ?? [], sheetWindows);
+      if (plannedSequence) {
+        console.log(
+          `[GameEngine] ✅ Game ${gameId}: Deterministic call sequence verified & locked (${plannedSequence.length} calls).`
+        );
+        // Persist to DB so resumes/restarts retain the exact sequence
+        await supabaseAdmin
+          .from('games')
+          .update({ planned_sequence: plannedSequence })
+          .eq('id', gameId);
+      } else {
+        console.warn(
+          `[GameEngine] ⚠️ Game ${gameId} has targeted winners, but target sequence could not be planned. Ensure all target tickets/sheets are booked!`
+        );
+      }
+    }
+  } else {
+    console.log(
+      `[GameEngine] Game ${gameId}: Existing planned call sequence loaded from DB (${plannedSequence.length} calls).`
+    );
+  }
+
   _gameState.set(gameId, {
     tenantId,
     intervalMs,
     nextCallDue,
-    processing:    false,
-    paused:        false,
-    tickets:       tickets ?? [],
-    calledNumbers: existingCalledNumbers,
-    calledSet:     new Set(existingCalledNumbers),
-    dividends:     dividends ?? [],
+    processing:      false,
+    paused:          false,
+    tickets:         tickets ?? [],
+    calledNumbers:   existingCalledNumbers,
+    calledSet:       new Set(existingCalledNumbers),
+    dividends:       dividends ?? [],
     wonDividends,
     sheetWindows,
+    plannedSequence: plannedSequence ?? null,
   });
 };
 
@@ -682,7 +729,7 @@ const resetCallNumbers = async (tenantId, gameId) => {
   // 3. Update game status
   const { error: gameError } = await supabaseAdmin
     .from('games')
-    .update({ status: 'scheduled', started_at: null })
+    .update({ status: 'scheduled', started_at: null, planned_sequence: null })
     .eq('id', gameId)
     .eq('tenant_id', tenantId);
     
@@ -691,4 +738,25 @@ const resetCallNumbers = async (tenantId, gameId) => {
   console.log(`[GameEngine] Reset call for game ${gameId} complete.`);
 };
 
-module.exports = { startGame, stopGame, completeGame, getGameState, resumeGameFromDB, pauseGame, resumeGame, updateGameInterval, resetCallNumbers };
+/**
+ * Clears in-memory game state if present (used when admin modifies targets or settings).
+ */
+const clearGameMemory = (gameId) => {
+  if (_gameState.has(gameId)) {
+    _gameState.delete(gameId);
+    console.log(`[GameEngine] Game ${gameId} cleared from memory cache.`);
+  }
+};
+
+module.exports = {
+  startGame,
+  stopGame,
+  completeGame,
+  getGameState,
+  resumeGameFromDB,
+  pauseGame,
+  resumeGame,
+  updateGameInterval,
+  resetCallNumbers,
+  clearGameMemory,
+};

@@ -26,7 +26,7 @@ const resumeRunningGames = async () => {
 
   const { data: runningGames, error } = await supabaseAdmin
     .from('games')
-    .select('id, tenant_id, call_interval_seconds')
+    .select('id, tenant_id, call_interval_seconds, planned_sequence')
     .eq('status', 'running');
 
   if (error) {

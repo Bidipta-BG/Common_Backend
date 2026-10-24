@@ -1,6 +1,18 @@
 const express = require('express');
 const { validateBody, z } = require('../utils/validateBody');
-const { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, markTenantAsPaid, updateTenant } = require('../controllers/tenants.controller');
+const {
+  adminUpdateTenant,
+  checkAvailability,
+  createTenant,
+  getAllTenants,
+  getByDomain,
+  getTenantById,
+  markTenantAsPaid,
+  updateTenant,
+  getTenantGames,
+  getGameDividendsForAdmin,
+  updateGameDividendsForAdmin,
+} = require('../controllers/tenants.controller');
 const { getCurrentGame } = require('../controllers/games.controller');
 
 // ─── Zod schema: POST /internal/tenants ──────────────────────────────────────
@@ -35,6 +47,18 @@ const adminUpdateSchema = z.object({
   organizer_whatsapp_number: z.string().optional().nullable(),
 });
 
+const adminUpdateDividendsSchema = z.object({
+  dividends: z.array(
+    z.object({
+      id: z.string().uuid(),
+      prizeAmount: z.number().nonnegative().optional(),
+      prize_amount: z.number().nonnegative().optional(),
+      targetTicketNumber: z.number().int().positive().nullable().optional(),
+      target_ticket_number: z.number().int().positive().nullable().optional(),
+    })
+  ).min(1, 'dividends array must be non-empty'),
+});
+
 // ─── Internal router (mounted at /api/starttambola/internal/tenants) ──────────
 // All routes here require requireSuperAdminKey (applied at mount in index.js).
 const internalRouter = express.Router();
@@ -46,6 +70,19 @@ internalRouter.get('/', getAllTenants);
 // PATCH /internal/tenants/:tenantId
 // Updates tenant and subscription details (Admin Dashboard)
 internalRouter.patch('/:tenantId', validateBody(adminUpdateSchema), adminUpdateTenant);
+
+// GET /internal/tenants/:tenantId/games
+internalRouter.get('/:tenantId/games', getTenantGames);
+
+// GET /internal/tenants/:tenantId/games/:gameId/dividends
+internalRouter.get('/:tenantId/games/:gameId/dividends', getGameDividendsForAdmin);
+
+// PATCH /internal/tenants/:tenantId/games/:gameId/dividends
+internalRouter.patch(
+  '/:tenantId/games/:gameId/dividends',
+  validateBody(adminUpdateDividendsSchema),
+  updateGameDividendsForAdmin
+);
 
 // POST /internal/tenants/:tenantId/mark-paid
 // Marks a tenant and its bumper subscription as paid

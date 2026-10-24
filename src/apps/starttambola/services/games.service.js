@@ -262,12 +262,18 @@ const shuffleTickets = async (tenantId, gameId) => {
   const newRows = _buildTicketRows(tenantId, gameId, game.total_tickets, 1);
   await _insertTicketChunks(newRows);
 
+  // Clear any existing planned_sequence since ticket grids have changed
+  await supabaseAdmin
+    .from('games')
+    .update({ planned_sequence: null })
+    .eq('id', gameId);
+
   return { message: 'All tickets shuffled and bookings cleared.' };
 };
 
 // ─── resetGame ────────────────────────────────────────────────────────────────
 // Deletes all called_numbers and winners rows for this game.
-// Resets game.status back to 'scheduled' and clears timestamps.
+// Resets game.status back to 'scheduled' and clears timestamps and planned_sequence.
 
 const resetGame = async (tenantId, gameId) => {
   // Ownership check
@@ -282,13 +288,14 @@ const resetGame = async (tenantId, gameId) => {
   if (calledResult.error)  handleSupabaseError(calledResult.error,  'CalledNumbers');
   if (winnersResult.error) handleSupabaseError(winnersResult.error, 'Winners');
 
-  // Reset game status
+  // Reset game status and clear planned_sequence
   const { data: updatedGame, error: gameError } = await supabaseAdmin
     .from('games')
     .update({
-      status:       'scheduled',
-      started_at:   null,
-      completed_at: null,
+      status:           'scheduled',
+      started_at:       null,
+      completed_at:     null,
+      planned_sequence: null,
     })
     .eq('id', gameId)
     .eq('tenant_id', tenantId)
@@ -320,12 +327,21 @@ const deleteGame = async (tenantId, gameId) => {
 // ─── upsertDividends ─────────────────────────────────────────────────────────
 // Replaces the full dividend set for a game in one operation:
 // delete all existing rows then insert the new set.
-// For v1 this is acceptable — a brief gap between delete and insert is
-// non-critical since dividends are read only at game-start / claim time.
+// Preserves any existing target_ticket_number if not provided in incoming payload.
 
 const upsertDividends = async (tenantId, gameId, dividends) => {
   // Ownership check
   await _getGameOrThrow(tenantId, gameId);
+
+  // Fetch existing dividends to preserve target_ticket_number if not provided in payload
+  const { data: existingDividends } = await supabaseAdmin
+    .from('dividends')
+    .select('pattern_type, sort_order, target_ticket_number')
+    .eq('game_id', gameId);
+
+  const existingTargetMap = new Map(
+    (existingDividends ?? []).map((e) => [`${e.pattern_type}_${e.sort_order}`, e.target_ticket_number])
+  );
 
   // Delete existing dividends
   const { error: deleteError } = await supabaseAdmin
@@ -336,15 +352,29 @@ const upsertDividends = async (tenantId, gameId, dividends) => {
   if (deleteError) handleSupabaseError(deleteError, 'Dividends');
 
   // Insert new set
-  const rows = dividends.map((d) => ({
-    game_id:      gameId,
-    tenant_id:    tenantId,
-    name:         d.name,
-    pattern_type: d.patternType,
-    active:       d.active,
-    prize_amount: d.prizeAmount,
-    sort_order:   d.sortOrder,
-  }));
+  const rows = dividends.map((d) => {
+    const patternType = d.patternType || d.pattern_type;
+    const sortOrder = d.sortOrder !== undefined ? d.sortOrder : d.sort_order;
+    let targetNum = null;
+    if (d.targetTicketNumber !== undefined) {
+      targetNum = d.targetTicketNumber;
+    } else if (d.target_ticket_number !== undefined) {
+      targetNum = d.target_ticket_number;
+    } else {
+      targetNum = existingTargetMap.get(`${patternType}_${sortOrder}`) ?? null;
+    }
+
+    return {
+      game_id:              gameId,
+      tenant_id:            tenantId,
+      name:                 d.name,
+      pattern_type:         patternType,
+      active:               d.active,
+      prize_amount:         d.prizeAmount !== undefined ? d.prizeAmount : d.prize_amount,
+      sort_order:           sortOrder,
+      target_ticket_number: targetNum,
+    };
+  });
 
   const { data, error: insertError } = await supabaseAdmin
     .from('dividends')

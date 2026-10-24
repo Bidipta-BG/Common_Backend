@@ -81,4 +81,53 @@ const markTenantAsPaid = async (req, res, next) => {
   }
 };
 
-module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getByDomain, getTenantById, markTenantAsPaid, updateTenant };
+// ─── GET /internal/tenants/:tenantId/games ──────────────────────────────────
+const getTenantGames = async (req, res, next) => {
+  try {
+    const games = await tenantsService.getTenantGames(req.params.tenantId);
+    return res.status(200).json({ data: games });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── GET /internal/tenants/:tenantId/games/:gameId/dividends ──────────────────
+const getGameDividendsForAdmin = async (req, res, next) => {
+  try {
+    const result = await tenantsService.getGameDividendsForAdmin(
+      req.params.tenantId,
+      req.params.gameId
+    );
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+// ─── PATCH /internal/tenants/:tenantId/games/:gameId/dividends ────────────────
+const updateGameDividendsForAdmin = async (req, res, next) => {
+  try {
+    const result = await tenantsService.updateGameDividendsForAdmin(
+      req.params.tenantId,
+      req.params.gameId,
+      req.body.dividends
+    );
+    return res.status(200).json({ data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = {
+  adminUpdateTenant,
+  checkAvailability,
+  createTenant,
+  getAllTenants,
+  getByDomain,
+  getTenantById,
+  markTenantAsPaid,
+  updateTenant,
+  getTenantGames,
+  getGameDividendsForAdmin,
+  updateGameDividendsForAdmin,
+};

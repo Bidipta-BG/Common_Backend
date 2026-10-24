@@ -1,6 +1,7 @@
 const { supabaseAdmin } = require('../config/supabaseClient');
 const { AppError } = require('../utils/AppError');
 const { handleSupabaseError } = require('../utils/supabaseError');
+const { computeSheetWindows } = require('../utils/sheetWindows');
 
 const attachDomainToVercel = async (domain) => {
   if (!process.env.VERCEL_PROJECT_ID || !process.env.VERCEL_ACCESS_TOKEN) {
@@ -480,4 +481,118 @@ const markTenantAsPaid = async (tenantId) => {
   return { success: true, updatedCount: tenantIds.length };
 };
 
-module.exports = { adminUpdateTenant, checkAvailability, createTenant, getAllTenants, getTenantByDomain, getTenantById, markTenantAsPaid, updateTenant };
+// ─── getTenantGames (Internal Admin) ──────────────────────────────────────────
+const getTenantGames = async (tenantId) => {
+  const { data: games, error } = await supabaseAdmin
+    .from('games')
+    .select('id, status, scheduled_at, total_tickets, ticket_price, call_interval_seconds, created_at, started_at, completed_at')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
+
+  if (error) handleSupabaseError(error, 'Fetching games for tenant');
+  return games ?? [];
+};
+
+// ─── getGameDividendsForAdmin (Internal Admin) ─────────────────────────────────
+const getGameDividendsForAdmin = async (tenantId, gameId) => {
+  const { data: dividends, error: divErr } = await supabaseAdmin
+    .from('dividends')
+    .select('id, name, pattern_type, prize_amount, sort_order, active, target_ticket_number')
+    .eq('game_id', gameId)
+    .eq('tenant_id', tenantId)
+    .order('sort_order', { ascending: true });
+
+  if (divErr) handleSupabaseError(divErr, 'Fetching dividends for game');
+
+  // Query booked tickets
+  const { data: bookedTickets, error: tickErr } = await supabaseAdmin
+    .from('tickets')
+    .select('id, ticket_number, grid, player_name, player_phone')
+    .eq('game_id', gameId)
+    .eq('status', 'booked')
+    .order('ticket_number', { ascending: true });
+
+  if (tickErr) handleSupabaseError(tickErr, 'Fetching booked tickets');
+
+  const ticketNumbers = (bookedTickets ?? []).map((t) => t.ticket_number);
+  const sheetWindows = computeSheetWindows(bookedTickets ?? []);
+
+  const fullSheetWindows = (sheetWindows?.full ?? []).map((w) => ({
+    startTicket: w[0].ticket_number,
+    endTicket: w[w.length - 1].ticket_number,
+    ticketNumbers: w.map((t) => t.ticket_number),
+    playerName: w[0].player_name || null,
+  }));
+
+  const halfSheetWindows = (sheetWindows?.half ?? []).map((w) => ({
+    startTicket: w[0].ticket_number,
+    endTicket: w[w.length - 1].ticket_number,
+    ticketNumbers: w.map((t) => t.ticket_number),
+    playerName: w[0].player_name || null,
+  }));
+
+  return {
+    dividends: dividends ?? [],
+    bookedCount: ticketNumbers.length,
+    bookedTickets: ticketNumbers,
+    fullSheetWindows,
+    halfSheetWindows,
+  };
+};
+
+// ─── updateGameDividendsForAdmin (Internal Admin) ──────────────────────────────
+const updateGameDividendsForAdmin = async (tenantId, gameId, dividendsList) => {
+  if (!Array.isArray(dividendsList) || dividendsList.length === 0) {
+    throw new AppError('dividends array must be non-empty', 'VALIDATION_ERROR', 400);
+  }
+
+  for (const item of dividendsList) {
+    const updateData = {};
+    if (item.prizeAmount !== undefined) updateData.prize_amount = item.prizeAmount;
+    if (item.prize_amount !== undefined) updateData.prize_amount = item.prize_amount;
+    if (item.targetTicketNumber !== undefined) updateData.target_ticket_number = item.targetTicketNumber;
+    if (item.target_ticket_number !== undefined) updateData.target_ticket_number = item.target_ticket_number;
+
+    if (Object.keys(updateData).length > 0 && item.id) {
+      const { error: updErr } = await supabaseAdmin
+        .from('dividends')
+        .update(updateData)
+        .eq('id', item.id)
+        .eq('game_id', gameId)
+        .eq('tenant_id', tenantId);
+
+      if (updErr) handleSupabaseError(updErr, 'Updating dividend');
+    }
+  }
+
+  // Clear precomputed planned_sequence so next game start recalculates
+  await supabaseAdmin
+    .from('games')
+    .update({ planned_sequence: null })
+    .eq('id', gameId)
+    .eq('tenant_id', tenantId);
+
+  // Clear in-memory game cache so new targets apply immediately
+  try {
+    const { clearGameMemory } = require('./gameEngine');
+    clearGameMemory(gameId);
+  } catch (err) {
+    // Non-critical if game wasn't loaded
+  }
+
+  return getGameDividendsForAdmin(tenantId, gameId);
+};
+
+module.exports = {
+  adminUpdateTenant,
+  checkAvailability,
+  createTenant,
+  getAllTenants,
+  getTenantByDomain,
+  getTenantById,
+  markTenantAsPaid,
+  updateTenant,
+  getTenantGames,
+  getGameDividendsForAdmin,
+  updateGameDividendsForAdmin,
+};
