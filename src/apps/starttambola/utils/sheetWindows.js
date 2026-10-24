@@ -39,61 +39,73 @@ const computeSheetWindows = (tickets) => {
 
   if (!tickets || tickets.length === 0) return { half, full, halfCount: 0, fullCount: 0 };
 
-  // ── Step 1: Build consecutive runs of tickets ─────────────────────────────
-  // A "run" is an unbroken sequence of ticket numbers (e.g. 1,2,3,4,5,6).
-  const runs = [];
-  let currentRun = [tickets[0]];
-  for (let i = 1; i < tickets.length; i++) {
-    if (tickets[i].ticket_number === tickets[i - 1].ticket_number + 1) {
-      currentRun.push(tickets[i]);
-    } else {
-      runs.push(currentRun);
-      currentRun = [tickets[i]];
+  // ── Step 1: Partition tickets by their fixed 6-ticket sheet boundary ──────
+  // Sheet 0: 1..6, Sheet 1: 7..12, Sheet 2: 13..18, etc.
+  const sheetGroups = new Map();
+  for (const t of tickets) {
+    if (!t.ticket_number || t.ticket_number <= 0) continue;
+    const sheetIdx = Math.floor((t.ticket_number - 1) / 6);
+    if (!sheetGroups.has(sheetIdx)) {
+      sheetGroups.set(sheetIdx, []);
     }
+    sheetGroups.get(sheetIdx).push(t);
   }
-  runs.push(currentRun);
 
-  // ── Step 2: Process each consecutive run ──────────────────────────────────
-  for (const run of runs) {
-    // ── Full Sheet: greedy, same-owner groups of 6 ────────────────────────
-    // Walk the run in non-overlapping steps of 6. Only form a full-sheet window
-    // if all 6 tickets share the same owner. Otherwise, advance one ticket at a
-    // time to find the next valid group.
-    let i = 0;
-    const consumedByFull = new Set(); // indices consumed into full-sheet windows
+  // ── Step 2: Process each sheet independently ──────────────────────────────
+  const sortedSheetIndices = Array.from(sheetGroups.keys()).sort((a, b) => a - b);
 
-    while (i <= run.length - 6) {
-      const group = run.slice(i, i + 6);
-      const ownerKey = _ownerKey(group[0]);
+  for (const sheetIdx of sortedSheetIndices) {
+    const sheetTickets = sheetGroups.get(sheetIdx);
+    sheetTickets.sort((a, b) => a.ticket_number - b.ticket_number);
+
+    let isConsumedByFull = false;
+
+    // Full Sheet: all 6 tickets of this fixed sheet must be booked by the same owner
+    if (sheetTickets.length === 6) {
+      const firstOwner = _ownerKey(sheetTickets[0]);
+      const isCompleteConsecutive = sheetTickets.every(
+        (t, idx) => t.ticket_number === (sheetIdx * 6 + 1 + idx)
+      );
 
       if (
-        ownerKey !== null &&
-        group.every((t) => _ownerKey(t) === ownerKey)
+        firstOwner !== null &&
+        isCompleteConsecutive &&
+        sheetTickets.every((t) => _ownerKey(t) === firstOwner)
       ) {
-        // Valid same-owner full sheet
-        full.push(group);
-        for (let k = i; k < i + 6; k++) consumedByFull.add(k);
-        i += 6; // advance past this group
-      } else {
-        i += 1; // mixed ownership or unbooked — slide one forward
+        full.push(sheetTickets);
+        isConsumedByFull = true;
       }
     }
 
-    // ── Half Sheet: overlapping, same-owner groups of 3 from the remainder ──
-    // Only consider tickets NOT consumed by a full-sheet window.
-    const remainder = run.filter((_, idx) => !consumedByFull.has(idx));
+    // Half Sheet: 3 consecutive tickets within this sheet booked by the same owner
+    if (!isConsumedByFull && sheetTickets.length >= 3) {
+      // Build consecutive runs within this sheet
+      const runs = [];
+      let currentRun = [sheetTickets[0]];
 
-    for (let j = 0; j <= remainder.length - 3; j++) {
-      const group = remainder.slice(j, j + 3);
-      const ownerKey = _ownerKey(group[0]);
-
-      if (
-        ownerKey !== null &&
-        group.every((t) => _ownerKey(t) === ownerKey)
-      ) {
-        half.push(group);
+      for (let i = 1; i < sheetTickets.length; i++) {
+        if (sheetTickets[i].ticket_number === sheetTickets[i - 1].ticket_number + 1) {
+          currentRun.push(sheetTickets[i]);
+        } else {
+          runs.push(currentRun);
+          currentRun = [sheetTickets[i]];
+        }
       }
-      // If mixed ownership or unbooked, skip this window silently.
+      runs.push(currentRun);
+
+      for (const run of runs) {
+        for (let j = 0; j <= run.length - 3; j++) {
+          const group = run.slice(j, j + 3);
+          const ownerKey = _ownerKey(group[0]);
+
+          if (
+            ownerKey !== null &&
+            group.every((t) => _ownerKey(t) === ownerKey)
+          ) {
+            half.push(group);
+          }
+        }
+      }
     }
   }
 

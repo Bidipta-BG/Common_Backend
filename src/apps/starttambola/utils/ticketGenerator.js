@@ -139,4 +139,213 @@ const generateTicketBatch = (count) => {
   return tickets;
 };
 
-module.exports = { generateTambolaTicket, generateTicketBatch };
+// ─── Strip-of-6 (Full Sheet) Generator ────────────────────────────────────────
+//
+// In authentic Tambola (Housie / 90-ball Bingo):
+//   • A Full Sheet (Strip) contains exactly 6 tickets.
+//   • Across the 6 tickets, ALL 90 numbers (1 to 90) appear EXACTLY ONCE.
+//   • ZERO duplicates across tickets 1 to 6.
+//   • Each ticket has 3 rows × 9 columns with exactly 15 numbers (5 per row).
+//   • Numbers within each column are sorted ascending top → bottom.
+
+/**
+ * Deterministic fallback matrix with random permutations.
+ * Base zeros represent columns with single numbers (no extra).
+ * Exactly 3 zeros per row (6 extras per row = 15 numbers per ticket).
+ * Col 0 has 3 zeros (3 extras = 9 numbers).
+ * Cols 1..7 have 2 zeros each (4 extras = 10 numbers each).
+ * Col 8 has 1 zero (5 extras = 11 numbers).
+ */
+const _getFallbackExtrasMatrix = () => {
+  const baseZeros = [
+    [0, 1, 2],
+    [0, 3, 4],
+    [0, 5, 6],
+    [1, 3, 7],
+    [2, 4, 7],
+    [5, 6, 8],
+  ];
+
+  const rowOrder = _shuffle([0, 1, 2, 3, 4, 5]);
+  const middleColMap = _shuffle([1, 2, 3, 4, 5, 6, 7]);
+  const extras = Array.from({ length: 6 }, () => new Array(9).fill(1));
+
+  for (let r = 0; r < 6; r++) {
+    const origRow = baseZeros[rowOrder[r]];
+    for (const c of origRow) {
+      let mappedCol = c;
+      if (c >= 1 && c <= 7) {
+        mappedCol = middleColMap[c - 1];
+      }
+      extras[r][mappedCol] = 0;
+    }
+  }
+
+  return extras;
+};
+
+/**
+ * Generates a 6×9 binary matrix indicating which ticket gets an extra (2nd) number in which column.
+ * Row sums = 6 (every ticket gets 9 base numbers + 6 extras = 15 numbers).
+ * Column sums = [3, 4, 4, 4, 4, 4, 4, 4, 5] (adding 6 base numbers gives 9, 10, ..., 11).
+ */
+const _generateExtrasMatrix = () => {
+  const colNeeds = [3, 4, 4, 4, 4, 4, 4, 4, 5];
+
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const rowCounts = [0, 0, 0, 0, 0, 0];
+    const extras = Array.from({ length: 6 }, () => new Array(9).fill(0));
+
+    // Process constrained columns first: Col 8 (5), Col 0 (3), then shuffled Cols 1..7 (4)
+    const middleCols = _shuffle([1, 2, 3, 4, 5, 6, 7]);
+    const colOrder = [8, 0, ...middleCols];
+
+    let valid = true;
+    for (const c of colOrder) {
+      const needed = colNeeds[c];
+      const candidates = [0, 1, 2, 3, 4, 5]
+        .filter((t) => rowCounts[t] < 6)
+        .sort((t1, t2) => rowCounts[t1] - rowCounts[t2] || Math.random() - 0.5);
+
+      if (candidates.length < needed) {
+        valid = false;
+        break;
+      }
+
+      const chosen = candidates.slice(0, needed);
+      for (const t of chosen) {
+        extras[t][c] = 1;
+        rowCounts[t]++;
+      }
+    }
+
+    if (valid && rowCounts.every((r) => r === 6)) {
+      return extras;
+    }
+  }
+
+  return _getFallbackExtrasMatrix();
+};
+
+/**
+ * Generates a complete authentic Tambola strip of 6 tickets.
+ * All 90 numbers from 1 to 90 appear exactly once across the 6 tickets.
+ *
+ * @returns {number[][][]} Array of 6 grids (each 3×9)
+ */
+const generateTambolaStrip = () => {
+  // 1. Column number pools: Col 0: 1-9, Cols 1..7: 10 each, Col 8: 80-90 (11 total)
+  const colPools = COL_RANGES.map(({ min, max }) => {
+    const pool = [];
+    for (let n = min; n <= max; n++) pool.push(n);
+    return _shuffle(pool);
+  });
+
+  // 2. Extra numbers matrix (which ticket gets 2 numbers in which column)
+  const extras = _generateExtrasMatrix();
+
+  // 3. Partition numbers from colPools into tickets
+  // ticketColNumbers[t][c] = sorted array of numbers for ticket t in column c
+  const ticketColNumbers = Array.from({ length: 6 }, () =>
+    Array.from({ length: 9 }, () => [])
+  );
+
+  for (let c = 0; c < 9; c++) {
+    const pool = colPools[c];
+    let poolIdx = 0;
+    for (let t = 0; t < 6; t++) {
+      const count = 1 + extras[t][c]; // 1 or 2 numbers
+      const assigned = pool.slice(poolIdx, poolIdx + count).sort((a, b) => a - b);
+      ticketColNumbers[t][c] = assigned;
+      poolIdx += count;
+    }
+  }
+
+  // 4. Place numbers into the 3×9 grid for each ticket
+  const stripGrids = [];
+
+  for (let t = 0; t < 6; t++) {
+    const grid = [
+      new Array(9).fill(0),
+      new Array(9).fill(0),
+      new Array(9).fill(0),
+    ];
+
+    // Find the 6 columns with 2 numbers and the 3 columns with 1 number
+    const colsWith2 = [];
+    const colsWith1 = [];
+    for (let c = 0; c < 9; c++) {
+      if (extras[t][c] === 1) {
+        colsWith2.push(c);
+      } else {
+        colsWith1.push(c);
+      }
+    }
+
+    // Partition 6 columns with 2 numbers into 3 pairs:
+    // Pair 1: placed in Rows 1 & 2 (omits Row 0)
+    // Pair 2: placed in Rows 0 & 2 (omits Row 1)
+    // Pair 3: placed in Rows 0 & 1 (omits Row 2)
+    const shuffledColsWith2 = _shuffle(colsWith2);
+    const omitRow0 = shuffledColsWith2.slice(0, 2);
+    const omitRow1 = shuffledColsWith2.slice(2, 4);
+    const omitRow2 = shuffledColsWith2.slice(4, 6);
+
+    // Partition 3 columns with 1 number:
+    // 1 col in Row 0, 1 col in Row 1, 1 col in Row 2
+    const shuffledColsWith1 = _shuffle(colsWith1);
+    const rowForCol1 = {
+      [shuffledColsWith1[0]]: 0,
+      [shuffledColsWith1[1]]: 1,
+      [shuffledColsWith1[2]]: 2,
+    };
+
+    // Assign numbers into the grid
+    for (const c of omitRow0) {
+      grid[1][c] = ticketColNumbers[t][c][0];
+      grid[2][c] = ticketColNumbers[t][c][1];
+    }
+    for (const c of omitRow1) {
+      grid[0][c] = ticketColNumbers[t][c][0];
+      grid[2][c] = ticketColNumbers[t][c][1];
+    }
+    for (const c of omitRow2) {
+      grid[0][c] = ticketColNumbers[t][c][0];
+      grid[1][c] = ticketColNumbers[t][c][1];
+    }
+    for (const c of shuffledColsWith1) {
+      const r = rowForCol1[c];
+      grid[r][c] = ticketColNumbers[t][c][0];
+    }
+
+    stripGrids.push(grid);
+  }
+
+  return stripGrids;
+};
+
+/**
+ * Generates an array of N Tambola tickets using authentic 6-ticket strips.
+ * Every consecutive block of 6 tickets (1..6, 7..12, etc.) contains all 90 numbers with zero duplicates.
+ *
+ * @param {number} count — number of tickets to generate (e.g. 900 or 1800)
+ * @returns {number[][][]} array of count grids (3×9 each)
+ */
+const generateStripBatch = (count) => {
+  const tickets = [];
+  while (tickets.length < count) {
+    const strip = generateTambolaStrip();
+    for (const grid of strip) {
+      tickets.push(grid);
+      if (tickets.length === count) break;
+    }
+  }
+  return tickets;
+};
+
+module.exports = {
+  generateTambolaTicket,
+  generateTicketBatch,
+  generateTambolaStrip,
+  generateStripBatch,
+};

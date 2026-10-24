@@ -1,7 +1,7 @@
 const { supabaseAdmin } = require('../config/supabaseClient');
 const { AppError } = require('../utils/AppError');
 const { handleSupabaseError } = require('../utils/supabaseError');
-const { generateTambolaTicket } = require('../utils/ticketGenerator');
+const { generateTambolaTicket, generateStripBatch } = require('../utils/ticketGenerator');
 const { computeSheetWindows } = require('../utils/sheetWindows');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -29,16 +29,19 @@ const _getGameOrThrow = async (tenantId, gameId) => {
 
 /**
  * Builds the ticket rows array for insertion.
+ * Uses authentic 6-ticket strips (Full Sheets) so all 90 numbers are present with zero duplicates.
  * startNumber is the ticket_number for the first new ticket.
  */
-const _buildTicketRows = (tenantId, gameId, count, startNumber = 1) =>
-  Array.from({ length: count }, (_, i) => ({
+const _buildTicketRows = (tenantId, gameId, count, startNumber = 1) => {
+  const grids = generateStripBatch(count);
+  return grids.map((grid, i) => ({
     game_id:       gameId,
     tenant_id:     tenantId,
     ticket_number: startNumber + i,
-    grid:          generateTambolaTicket(), // valid 3×9 Tambola grid
+    grid:          grid,
     status:        'available',
   }));
+};
 
 /** Inserts an array of ticket rows in chunks to avoid PostgREST row limits. */
 const _insertTicketChunks = async (rows) => {
