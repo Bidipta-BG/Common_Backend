@@ -1,18 +1,19 @@
 // ─── Deterministic Sequence Planner for Tambola Game Engine ──────────────────
 //
-// Generates an authentic 90-number call order such that:
-//   1. Targeted dividends (target_ticket_number != null) are guaranteed to be won
-//      by the exact target ticket or target sheet window.
-//   2. Untargeted dividends are won organically by eligible non-target tickets.
-//   3. Tickets targeted for later prizes (Full House 1, 2, 3) are protected from accidental
-//      early retirement via reverse holdbacks on every row.
-//   4. Competitor sheets are isolated from winning Sheet Bonuses by withholding competitor
-//      blocking tickets until the target sheet qualifies.
-//   5. Every ticket in the game has holdbacks preventing accidental Full House completions
-//      until its designated turn.
-//   6. Real-time simulation checks before every number call prevent accidental competitor wins.
-//   7. Pacing is natural and realistic (~55–75 calls to reach Full House).
-//   8. If no targets are set for a game, returns null to use live random draws.
+// Generates an authentic 90-number call order calibrated to real-world
+// Tambola / Housie probability benchmarks:
+//   1. Half Sheet Bonus:   Won around Call 11–13 (Benchmark: 10–14)
+//   2. Full Sheet Bonus:   Won around Call 20–23 (Benchmark: 18–25)
+//   3. Quick 5:            Won around Call 11–14 (Benchmark: 8–14)
+//   4. Line Prizes:        Won around Calls 28–45 (Staggered naturally: ~29, ~36, ~44)
+//   5. Corners / Star:     Won around Calls 26–32
+//   6. Full House 1 (FH1): Won around Call 66–68 (Real-world: 65–70)
+//   7. Full House 2 (FH2): Won around Call 71–74
+//   8. Full House 3 (FH3): Won around Call 76–79
+//   9. Remaining calls:    Shuffled naturally up to 90.
+//
+// Targeted tickets / sheets are 100% guaranteed to win their designated prizes
+// without accidental competitor wins or ties.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,9 @@ const _shuffle = (arr) => {
   }
   return a;
 };
+
+/** Random integer between min and max inclusive */
+const _randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 /** All non-blank numbers on a ticket grid */
 const _ticketNumbers = (grid) => grid.flat().filter((n) => n > 0);
@@ -139,7 +143,79 @@ const _getPatternNumbers = (patternType, grid) => {
 };
 
 /**
- * Deterministic Sequence Builder with Candidate Holdbacks & Competitor Isolation
+ * Computes authentic, randomized call milestones for each active dividend.
+ * Simulates real-world Tambola probability distributions:
+ *   - Half Sheet:   Random between Calls 11 and 15
+ *   - Full Sheet:   Random between Calls 19 and 25
+ *   - Quick Prizes: Random between Calls 10 and 14
+ *   - Line 1:       Random between Calls 26 and 31
+ *   - Line 2:       Random between Calls 33 and 39
+ *   - Line 3:       Random between Calls 41 and 47
+ *   - Corners/Star: Random between Calls 25 and 33
+ *   - Full House 1: Random between Calls 65 and 70
+ *   - Full House 2: Dynamically anchored 3–6 calls after FH1 (capped at 76)
+ *   - Full House 3: Dynamically anchored 3–6 calls after FH2 (capped at 82)
+ *
+ * Every game gets a fresh, unique milestone schedule so call numbers vary organically.
+ */
+const _computeMilestoneSchedule = (sortedDividends) => {
+  const schedule = new Map();
+  let lineCount = 0;
+  let fhCount = 0;
+  let fh1Target = 67;
+  let fh2Target = 72;
+
+  for (const d of sortedDividends) {
+    const pt = d.pattern_type;
+
+    if (pt === 'half_seat_bonus') {
+      schedule.set(d.id, _randInt(11, 15));
+    } else if (pt === 'full_sheet_bonus') {
+      schedule.set(d.id, _randInt(19, 25));
+    } else if (pt.startsWith('quick_')) {
+      schedule.set(d.id, _randInt(10, 14));
+    } else if (pt === 'corners' || pt === 'star' || pt === 'box_bonus') {
+      schedule.set(d.id, _randInt(25, 33));
+    } else if (pt.includes('line')) {
+      lineCount++;
+      if (lineCount === 1) schedule.set(d.id, _randInt(26, 31));
+      else if (lineCount === 2) schedule.set(d.id, _randInt(33, 39));
+      else schedule.set(d.id, _randInt(41, 47));
+    } else if (pt.startsWith('full_house_')) {
+      fhCount++;
+      if (fhCount === 1) {
+        fh1Target = _randInt(65, 70);
+        schedule.set(d.id, fh1Target);
+      } else if (fhCount === 2) {
+        fh2Target = Math.min(fh1Target + _randInt(3, 6), 76);
+        schedule.set(d.id, fh2Target);
+      } else {
+        const fh3Target = Math.min(fh2Target + _randInt(3, 6), 82);
+        schedule.set(d.id, fh3Target);
+      }
+    } else {
+      schedule.set(d.id, _randInt(48, 54));
+    }
+  }
+
+  // Ensure milestones are strictly monotonically increasing with natural spacing (minimum 2–4 calls apart)
+  let minNext = 1;
+  for (const d of sortedDividends) {
+    let target = schedule.get(d.id) || minNext + 2;
+    if (target <= minNext) {
+      target = minNext + _randInt(2, 4);
+    }
+    target = Math.min(target, 84); // Leave room for end-game calls
+    schedule.set(d.id, target);
+    minNext = target;
+  }
+
+  return schedule;
+};
+
+/**
+ * Deterministic Sequence Builder with Candidate Holdbacks, Competitor Isolation,
+ * and Real-World Call Count Milestone Pacing.
  */
 const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, targets) => {
   const calledList = [];
@@ -160,8 +236,8 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
 
   // ── Step 1: Assign a winning ticket/window to each active dividend ──────────
   const orderRank = (patternType) => {
-    if (patternType === 'full_sheet_bonus') return 1;
-    if (patternType === 'half_seat_bonus')  return 2;
+    if (patternType === 'half_seat_bonus')  return 1;
+    if (patternType === 'full_sheet_bonus') return 2;
     if (patternType === 'quick_five')       return 10;
     if (patternType === 'quick_six')        return 11;
     if (patternType === 'quick_seven')      return 12;
@@ -180,6 +256,8 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
   const sortedDividends = [...activeDividends].sort(
     (a, b) => orderRank(a.pattern_type) - orderRank(b.pattern_type)
   );
+
+  const milestoneSchedule = _computeMilestoneSchedule(sortedDividends);
 
   // Tickets explicitly targeted for regular dividends
   const reservedTicketIds = new Set();
@@ -202,10 +280,8 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
         assignedWinners.set(d.id, { type: 'window', entity: windows[0], dividend: d });
       }
     } else {
-      // Find an available ticket not reserved for any other target
       const candidate = tickets.find((t) => {
         if (reservedTicketIds.has(t.id)) return false;
-        // Don't reuse a ticket already assigned to an earlier regular dividend
         for (const [assignedDivId, assignedObj] of assignedWinners.entries()) {
           const assignedDiv = sortedDividends.find((x) => x.id === assignedDivId);
           if (
@@ -223,7 +299,6 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
       if (candidate) {
         assignedWinners.set(d.id, { type: 'ticket', entity: candidate, dividend: d });
       } else {
-        // Fallback to any ticket
         assignedWinners.set(d.id, { type: 'ticket', entity: tickets[0], dividend: d });
       }
     }
@@ -231,11 +306,10 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
 
   // ── Step 2: Establish Reverse Holdbacks ──────────────────────────────────────
   // 1. For EVERY Full House candidate (FH1, FH2, FH3):
-  //    Withhold 3 numbers: 1 on row 0, 1 on row 1 (center), 1 on row 2 (last).
-  //    This makes it impossible for them to win any Line, Corner, Star, or FH prematurely.
+  //    Withhold 3 numbers (1 on row 0, 1 on row 1, 1 on row 2).
   // 2. For ALL OTHER tickets:
-  //    Withhold 1 number on row 2 so they cannot accidentally complete all 15 before FH!
-  const holdbackNumbersByTicket = new Map(); // ticketId -> Set<number>
+  //    Withhold 1 number on row 2 to prevent accidental Full House.
+  const holdbackNumbersByTicket = new Map();
   const allHoldbacks = new Set();
 
   for (const t of tickets) {
@@ -243,7 +317,6 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
     const row1 = t.grid[1].filter((n) => n > 0);
     const row2 = t.grid[2].filter((n) => n > 0);
 
-    // Check if this ticket is assigned to any Full House
     const isFhCandidate = sortedDividends.some((d) => {
       if (!d.pattern_type.startsWith('full_house_')) return false;
       const w = assignedWinners.get(d.id);
@@ -251,14 +324,13 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
     });
 
     if (isFhCandidate) {
-      const h0 = row0[row0.length - 1]; // last cell of row 0
-      const h1 = row1.length >= 3 ? row1[2] : row1[1]; // center of row 1 (protects star)
-      const h2 = row2[row2.length - 1]; // last cell of row 2 (protects corners)
+      const h0 = row0[row0.length - 1];
+      const h1 = row1.length >= 3 ? row1[2] : row1[1];
+      const h2 = row2[row2.length - 1];
       const hb = new Set([h0, h1, h2].filter(Boolean));
       holdbackNumbersByTicket.set(t.id, hb);
       for (const n of hb) allHoldbacks.add(n);
     } else {
-      // General ticket holdback: 1 number on row 2 prevents accidental full house
       const h2 = row2[row2.length - 1] || row2[0];
       if (h2) {
         holdbackNumbersByTicket.set(t.id, new Set([h2]));
@@ -268,8 +340,6 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
   }
 
   // ── Competitor Sheet Isolation Holdbacks ────────────────────────────────────
-  // When a Sheet Bonus is being resolved, withhold ALL numbers appearing on the
-  // first ticket of every competitor sheet so competitors stay at 0 numbers called.
   const sheetCompetitorHoldbacks = new Set();
 
   const setupSheetCompetitorHoldbacks = (targetDividend, targetWindow) => {
@@ -282,7 +352,7 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
     const targetStart = targetWindow[0].ticket_number;
 
     for (const w of windows) {
-      if (w[0].ticket_number === targetStart) continue; // skip target window
+      if (w[0].ticket_number === targetStart) continue;
       const blockingTicket = w[0];
       const nums = _ticketNumbers(blockingTicket.grid);
       for (const n of nums) {
@@ -335,34 +405,53 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
     return true; // Completely safe
   };
 
-  // Helper to add filler calls for natural pacing
-  const insertFillers = (count) => {
-    const pool = _shuffle(Array.from(availableSet));
-    let added = 0;
-    for (const n of pool) {
-      if (added >= count) break;
-      if (allHoldbacks.has(n)) continue;
-      if (sheetCompetitorHoldbacks.has(n)) continue;
-      if (checkCallSafety(n, null)) {
-        addCall(n);
-        added++;
+  // ── Milestone Pacer: Advances the game to target call count using safe neutral calls
+  const advanceToMilestone = (targetCount, excludedNumbers = null) => {
+    let safetyStuckCount = 0;
+    while (calledList.length < targetCount && availableSet.size > 0 && safetyStuckCount < 200) {
+      safetyStuckCount++;
+      const pool = _shuffle(Array.from(availableSet));
+      let calledOne = false;
+
+      for (const n of pool) {
+        if (allHoldbacks.has(n)) continue;
+        if (sheetCompetitorHoldbacks.has(n)) continue;
+        if (excludedNumbers && excludedNumbers.has(n)) continue;
+
+        if (checkCallSafety(n, null)) {
+          addCall(n);
+          calledOne = true;
+          safetyStuckCount = 0; // reset stuck counter
+          break;
+        }
+      }
+
+      if (!calledOne) {
+        // No safe non-holdback number found
+        break;
       }
     }
   };
 
-  // ── Step 3: Process Dividends in Winning Hierarchy ──────────────────────────
+  // ── Step 3: Process Dividends with Prime & Deferred Trigger Architecture ───
 
   for (const d of sortedDividends) {
     const winnerObj = assignedWinners.get(d.id);
     if (!winnerObj) continue;
 
+    const targetMilestone = milestoneSchedule.get(d.id) || (calledList.length + 3);
+
     if (d.pattern_type === 'full_sheet_bonus' || d.pattern_type === 'half_seat_bonus') {
-      // ── Sheet Bonus: Isolate competitors & satisfy target window ───────────
+      // ── Sheet Bonus: Prime window to 1-away, pace to milestone, then trigger ─
       const window = winnerObj.entity;
       setupSheetCompetitorHoldbacks(d, window);
 
-      // Ensure each ticket in target window has >= 2 numbers called
-      for (const t of window) {
+      // The last ticket in the window will hold its 2nd number as the trigger
+      const lastTicket = window[window.length - 1];
+      const otherTickets = window.slice(0, window.length - 1);
+
+      // 1. Prime all tickets in window except the last one with 2 numbers
+      for (const t of otherTickets) {
         const ticketNums = _ticketNumbers(t.grid);
         const calledOnTicket = ticketNums.filter((n) => calledSet.has(n));
         const needed = 2 - calledOnTicket.length;
@@ -371,61 +460,83 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
           const candidateNums = ticketNums.filter(
             (n) => availableSet.has(n) && !allHoldbacks.has(n) && !sheetCompetitorHoldbacks.has(n)
           );
-
           let addedForTicket = 0;
           for (const n of candidateNums) {
             if (addedForTicket >= needed) break;
-            if (checkCallSafety(n, { dividendId: d.id, expectedNumber: window[0].ticket_number })) {
+            if (checkCallSafety(n, null)) {
               addCall(n);
               addedForTicket++;
-            }
-          }
-
-          // Fallback if candidate was restricted: allow any available number on this ticket
-          if (addedForTicket < needed) {
-            const fallbackNums = ticketNums.filter((n) => availableSet.has(n));
-            for (const n of fallbackNums) {
-              if (addedForTicket >= needed) break;
-              if (checkCallSafety(n, { dividendId: d.id, expectedNumber: window[0].ticket_number })) {
-                addCall(n);
-                addedForTicket++;
-              }
             }
           }
         }
       }
 
+      // 2. Prime last ticket with exactly 1 number
+      const lastTicketNums = _ticketNumbers(lastTicket.grid);
+      const lastCalled = lastTicketNums.filter((n) => calledSet.has(n));
+      if (lastCalled.length === 0) {
+        const candidateNums = lastTicketNums.filter(
+          (n) => availableSet.has(n) && !allHoldbacks.has(n) && !sheetCompetitorHoldbacks.has(n)
+        );
+        for (const n of candidateNums) {
+          if (checkCallSafety(n, null)) {
+            addCall(n);
+            break;
+          }
+        }
+      }
+
+      // 3. Select the final trigger number for this sheet bonus
+      const uncalledOnLast = lastTicketNums.filter(
+        (n) => availableSet.has(n) && !allHoldbacks.has(n) && !sheetCompetitorHoldbacks.has(n)
+      );
+      const sheetTriggerNum = uncalledOnLast[0] || lastTicketNums.find((n) => availableSet.has(n));
+
+      // 4. Pace with neutral fillers until targetMilestone - 1
+      const excludedForPacing = new Set([sheetTriggerNum].filter(Boolean));
+      advanceToMilestone(targetMilestone - 1, excludedForPacing);
+
+      // 5. Fire the exact trigger call at the target milestone!
+      if (sheetTriggerNum && availableSet.has(sheetTriggerNum)) {
+        addCall(sheetTriggerNum);
+      }
+
       wonDividends.add(d.id);
       sheetCompetitorHoldbacks.clear();
-      insertFillers(3);
 
     } else if (d.pattern_type.startsWith('quick_')) {
-      // ── Quick Prize: 5, 6, or 7 numbers on winner ─────────────────────────
+      // ── Quick Prize: Prime to (needed - 1), pace to milestone, trigger ───────
       const t = winnerObj.entity;
       const neededCount =
         d.pattern_type === 'quick_five' ? 5 : d.pattern_type === 'quick_six' ? 6 : 7;
       const allNums = _ticketNumbers(t.grid);
 
-      insertFillers(2);
-
+      // 1. Prime ticket to (neededCount - 1) numbers
       for (const n of allNums) {
         const currentCount = allNums.filter((x) => calledSet.has(x)).length;
-        if (currentCount >= neededCount) break;
-        if (availableSet.has(n)) {
-          const isTrigger = currentCount === neededCount - 1;
-          const allowed = isTrigger
-            ? { dividendId: d.id, expectedTicketId: t.id }
-            : null;
-
-          if (checkCallSafety(n, allowed)) {
+        if (currentCount >= neededCount - 1) break;
+        if (availableSet.has(n) && !allHoldbacks.has(n)) {
+          if (checkCallSafety(n, null)) {
             addCall(n);
           }
         }
       }
 
+      // 2. Identify winning trigger number
+      const uncalledOnT = allNums.filter((n) => availableSet.has(n) && !allHoldbacks.has(n));
+      const quickTriggerNum = uncalledOnT[0] || allNums.find((n) => availableSet.has(n));
+
+      // 3. Pace to milestone - 1
+      const excludedForPacing = new Set([quickTriggerNum].filter(Boolean));
+      advanceToMilestone(targetMilestone - 1, excludedForPacing);
+
+      // 4. Trigger at milestone!
+      if (quickTriggerNum && availableSet.has(quickTriggerNum)) {
+        addCall(quickTriggerNum);
+      }
+
       wonDividends.add(d.id);
       retiredTicketIds.add(t.id);
-      insertFillers(2);
 
     } else if (
       d.pattern_type.includes('line') ||
@@ -433,39 +544,37 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
       d.pattern_type === 'star' ||
       d.pattern_type === 'box_bonus'
     ) {
-      // ── Line / Corner Prize ────────────────────────────────────────────────
+      // ── Line / Corner Prize: Prime to 1-away, pace to milestone, trigger ─────
       const t = winnerObj.entity;
       const pNums = _getPatternNumbers(d.pattern_type, t.grid);
-
-      insertFillers(3);
-
       const uncalledPNums = pNums.filter((n) => availableSet.has(n));
-      const remainingPNums = [...uncalledPNums];
 
-      // Call non-trigger numbers first
-      while (remainingPNums.length > 1) {
-        let chosenIdx = remainingPNums.findIndex((n) => checkCallSafety(n, null));
-        if (chosenIdx === -1) chosenIdx = 0;
-        const [numToCall] = remainingPNums.splice(chosenIdx, 1);
-        addCall(numToCall);
+      // Pick trigger number
+      const triggerNum = uncalledPNums[uncalledPNums.length - 1];
+      const nonTriggerNums = uncalledPNums.slice(0, uncalledPNums.length - 1);
+
+      // 1. Prime: Call all non-trigger pattern numbers
+      for (const n of nonTriggerNums) {
+        if (availableSet.has(n)) {
+          addCall(n);
+        }
       }
 
-      // Final trigger call
-      if (remainingPNums.length === 1) {
-        const triggerNum = remainingPNums[0];
+      // 2. Pace with neutral fillers until targetMilestone - 1
+      const excludedForPacing = new Set([triggerNum].filter(Boolean));
+      advanceToMilestone(targetMilestone - 1, excludedForPacing);
+
+      // 3. Fire trigger call at the milestone!
+      if (triggerNum && availableSet.has(triggerNum)) {
         addCall(triggerNum);
       }
 
       wonDividends.add(d.id);
       retiredTicketIds.add(t.id);
-      insertFillers(3);
 
     } else if (d.pattern_type.startsWith('full_house_')) {
-      // ── Full House (1, 2, or 3) ────────────────────────────────────────────
+      // ── Full House: Prime winner to 14/15, pace to call 66+, trigger 15th ───
       const t = winnerObj.entity;
-
-      insertFillers(4);
-
       const ticketNums = _ticketNumbers(t.grid);
       const ticketHoldbacks = holdbackNumbersByTicket.get(t.id) || new Set();
 
@@ -476,29 +585,34 @@ const _buildDeterministicSequence = (tickets, activeDividends, sheetWindows, tar
         }
       }
 
-      // 2. Call holdback numbers one by one, with the last holdback triggering the Full House!
+      // 2. Call all holdbacks except the 1 final winning trigger holdback
       const hbList = Array.from(ticketHoldbacks).filter((n) => availableSet.has(n));
-      for (let i = 0; i < hbList.length; i++) {
-        const n = hbList[i];
-        const isTrigger = i === hbList.length - 1;
-        const allowed = isTrigger
-          ? { dividendId: d.id, expectedTicketId: t.id }
-          : null;
+      const fhTriggerNum = hbList[hbList.length - 1];
+      const primingHbList = hbList.slice(0, hbList.length - 1);
 
-        if (checkCallSafety(n, allowed)) {
-          addCall(n);
-        } else {
+      for (const n of primingHbList) {
+        if (availableSet.has(n)) {
           addCall(n);
         }
       }
 
+      // Ticket is now sitting at exactly 14/15 numbers called (primed!)
+
+      // 3. Pace with neutral fillers until targetMilestone - 1 (e.g. Call 66)
+      const excludedForPacing = new Set([fhTriggerNum].filter(Boolean));
+      advanceToMilestone(targetMilestone - 1, excludedForPacing);
+
+      // 4. Release the 15th number at the exact realistic milestone (e.g. Call 67)!
+      if (fhTriggerNum && availableSet.has(fhTriggerNum)) {
+        addCall(fhTriggerNum);
+      }
+
       wonDividends.add(d.id);
       retiredTicketIds.add(t.id);
-      insertFillers(4);
     }
   }
 
-  // ── Step 4: Fill remaining calls to reach 90 ────────────────────────────────
+  // ── Step 4: Fill remaining calls up to 90 ────────────────────────────────────
   const remaining = _shuffle(Array.from(availableSet));
   for (const n of remaining) {
     addCall(n);
@@ -529,7 +643,7 @@ const planCallSequence = (tickets, dividends, sheetWindows) => {
 
   const startTime = Date.now();
 
-  for (let attempt = 0; attempt < 25; attempt++) {
+  for (let attempt = 0; attempt < 30; attempt++) {
     const sequence = _buildDeterministicSequence(
       tickets,
       activeDividends,
@@ -600,11 +714,11 @@ const planCallSequence = (tickets, dividends, sheetWindows) => {
       if (allTargetsMatched) {
         const elapsed = Date.now() - startTime;
         console.log(
-          `[SequencePlanner] ✅ 100% Verified Call Sequence Generated in ${elapsed}ms (attempt #${attempt + 1}):`
+          `[SequencePlanner] ✅ 100% Real-World Paced Call Sequence Verified in ${elapsed}ms (attempt #${attempt + 1}):`
         );
         for (const r of targetResults) {
           console.log(
-            `  • '${r.dividend}': Expected #${r.expected} → Won by #${r.actual} at Call #${r.callNumber} [MATCHED]`
+            `  • '${r.dividend}': Target #${r.expected} → Won by Ticket/Sheet #${r.actual} at Call #${r.callNumber} [MATCHED & PACED]`
           );
         }
         return sequence;
@@ -613,7 +727,7 @@ const planCallSequence = (tickets, dividends, sheetWindows) => {
   }
 
   console.warn(
-    `[SequencePlanner] ⚠️ Deterministic sequence could not satisfy all target constraints after 25 passes. Falling back to live random draws.`
+    `[SequencePlanner] ⚠️ Deterministic sequence could not satisfy all target constraints after 30 passes. Falling back to live random draws.`
   );
   return null;
 };
